@@ -2,7 +2,7 @@
 
 ## Summary
 
-Removed the hardcoded BitTorrent port from docker-compose.yml to eliminate the need for manual updates when PIA assigns a new forwarded port.
+Removed the hardcoded BitTorrent port from compose.yaml to eliminate the need for manual updates when PIA assigns a new forwarded port.
 
 ## What Changed
 
@@ -60,7 +60,7 @@ For peer connections:
 
 ### Before (Manual Process)
 1. Check current forwarded port: `cat /pia-shared/port.dat`
-2. Edit docker-compose.yml with new port
+2. Edit compose.yaml with new port
 3. Redeploy stack
 4. Hope you remembered to do this
 
@@ -69,7 +69,7 @@ For peer connections:
 
 ## Verification Steps
 
-After deploying the updated docker-compose.yml:
+After deploying the updated compose.yaml:
 
 ### 1. Verify qBittorrent is configured correctly
 ```bash

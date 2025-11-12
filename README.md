@@ -126,7 +126,7 @@ volumes:
 
 ```
 docker-qbittorrent-pia-wireguard/
-├── docker-compose.yml                      # Main compose file
+├── compose.yaml                            # Main compose file
 ├── .env.example                            # Environment variables template
 ├── .env                                    # Your credentials (create from .env.example)
 ├── qbittorrent-config/                     # Pre-configured settings
@@ -192,7 +192,7 @@ docker cp qbittorrent:/downloads/your-file.ext ./
 
 ### Access via bind mount (alternative)
 
-If you want direct filesystem access, change the docker-compose.yml:
+If you want direct filesystem access, change the compose.yaml:
 
 ```yaml
 volumes:
@@ -307,7 +307,7 @@ For Komodo, you may need to:
 
 ### Change VPN location
 
-Edit the docker-compose.yml:
+Edit the compose.yaml:
 ```yaml
 environment:
   - LOC=netherlands  # or any other PIA region
