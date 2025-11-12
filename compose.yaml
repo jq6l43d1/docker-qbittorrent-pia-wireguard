@@ -2,14 +2,14 @@ name: pia-qbittorrent
 services:
   pia-wireguard:
     image: thrnz/docker-wireguard-pia
-    container_name: pia-wireguard-ireland
+    container_name: pia-wireguard-${INSTANCE_NAME:-ireland}
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
     devices:
       - /dev/net/tun:/dev/net/tun
     volumes:
-      - pia-shared:/pia-shared
+      - pia-shared-${INSTANCE_NAME:-ireland}:/pia-shared
     environment:
       # PIA Credentials (set in .env file)
       - USER=${PIA_USER}
@@ -30,11 +30,14 @@ services:
       # Security
       - FIREWALL=1
       - EXIT_ON_FATAL=0
+
+      # Timezone
+      - TZ=${TZ:-Etc/UTC}
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
     ports:
-      # qBittorrent WebUI (local access only)
-      - "8080:8080"
+      # qBittorrent WebUI (configurable port for multi-instance support)
+      - "${WEBUI_PORT:-8080}:${WEBUI_PORT:-8080}"
       # Note: BitTorrent peer port does not need Docker port mapping
       # Peers connect through the VPN tunnel, bypassing Docker's port mapping
       # qBittorrent is auto-configured to listen on PIA's forwarded port
@@ -42,26 +45,33 @@ services:
 
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
-    container_name: qbittorrent
-    network_mode: "container:pia-wireguard-ireland"
+    container_name: qbittorrent-${INSTANCE_NAME:-ireland}
+    network_mode: "container:pia-wireguard-${INSTANCE_NAME:-ireland}"
     depends_on:
       - pia-wireguard
     environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
-      - WEBUI_PORT=8080
+      # User/Group configuration
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+
+      # WebUI configuration
+      - WEBUI_PORT=${WEBUI_PORT:-8080}
+
+      # WebUI credentials (passed to init script)
+      - WEBUI_USERNAME=${WEBUI_USERNAME:-admin}
+      - WEBUI_PASSWORD=${WEBUI_PASSWORD}
     volumes:
       # Pre-configured qBittorrent config
       - ./qbittorrent-config:/config
-      # Downloads directory
-      - qbittorrent-downloads:/downloads
+      # Downloads directory (instance-specific)
+      - qbittorrent-downloads-${INSTANCE_NAME:-ireland}:/downloads
       # Access to PIA shared data (for reading forwarded port)
-      - pia-shared:/pia-shared:ro
+      - pia-shared-${INSTANCE_NAME:-ireland}:/pia-shared:ro
       # Custom init scripts for auto-configuration
       - ./custom-init:/custom-cont-init.d:ro
     restart: unless-stopped
 
 volumes:
-  pia-shared:
-  qbittorrent-downloads:
+  pia-shared-${INSTANCE_NAME:-ireland}:
+  qbittorrent-downloads-${INSTANCE_NAME:-ireland}:

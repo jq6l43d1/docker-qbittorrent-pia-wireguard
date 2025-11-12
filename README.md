@@ -10,6 +10,8 @@ Fully automated Docker setup for qBittorrent with Private Internet Access (PIA) 
 ✅ **Pre-configured settings** - Optimized for VPN usage out of the box
 ✅ **Persistent configuration** - Settings survive container restarts
 ✅ **No hardcoded ports** - Handles PIA's dynamic port changes automatically
+✅ **Multi-instance support** - Run multiple instances on the same system with different VPN locations
+✅ **Configurable WebUI credentials** - Set your own username and password via environment variables
 
 ## Quick Start
 
@@ -38,10 +40,28 @@ nano .env  # or use your preferred editor
 
 Your `.env` file should contain:
 ```env
+# PIA Credentials
 PIA_USER=your_actual_username
 PIA_PASS=your_actual_password
 PIA_LOCATION=ireland  # or your preferred location
+
+# Instance Configuration
+INSTANCE_NAME=ireland  # Used for container naming
+WEBUI_PORT=8080        # Port for accessing WebUI
+
+# WebUI Credentials (IMPORTANT: Set a strong password!)
+WEBUI_USERNAME=admin
+WEBUI_PASSWORD=your_secure_password_here
+
+# User/Group IDs (get with: id $(whoami))
+PUID=1000
+PGID=1000
+
+# Timezone
+TZ=Etc/UTC
 ```
+
+**Security Note:** Always set a strong `WEBUI_PASSWORD`! This protects your qBittorrent WebUI from unauthorized access.
 
 3. Deploy the stack:
 ```bash
@@ -55,8 +75,8 @@ docker exec pia-wireguard-ireland cat /pia-shared/port.dat
 
 # Access qBittorrent WebUI
 # http://your-server:8080
-# Username: admin
-# Password: Check logs for temporary password on first start
+# Username: from WEBUI_USERNAME in .env (default: admin)
+# Password: from WEBUI_PASSWORD in .env
 ```
 
 ### Available VPN Locations
@@ -81,6 +101,144 @@ Set your preferred location in the `.env` file:
 ```env
 PIA_LOCATION=uk_london
 ```
+
+## Running Multiple Instances
+
+You can run multiple qBittorrent+VPN instances on the same system, each with different VPN locations and separate ports. This is useful for:
+
+- Spreading load across multiple VPN servers
+- Accessing different regional content
+- Separating different types of torrents
+- Improving overall download speeds
+
+### Method 1: Separate Directories (Recommended)
+
+Create separate directories for each instance:
+
+```bash
+# Create directory structure
+mkdir -p ~/qbit-instances/{ireland,switzerland,netherlands}
+
+# Clone or copy to each location
+cd ~/qbit-instances/ireland
+git clone https://github.com/yourusername/docker-qbittorrent-pia-wireguard.git .
+
+cd ~/qbit-instances/switzerland
+git clone https://github.com/yourusername/docker-qbittorrent-pia-wireguard.git .
+
+cd ~/qbit-instances/netherlands
+git clone https://github.com/yourusername/docker-qbittorrent-pia-wireguard.git .
+```
+
+Configure each instance with unique settings:
+
+**~/qbit-instances/ireland/.env:**
+```env
+PIA_USER=your_pia_username
+PIA_PASS=your_pia_password
+PIA_LOCATION=ireland
+INSTANCE_NAME=ireland
+WEBUI_PORT=8080
+WEBUI_USERNAME=admin
+WEBUI_PASSWORD=your_password_here
+PUID=1000
+PGID=1000
+TZ=Etc/UTC
+```
+
+**~/qbit-instances/switzerland/.env:**
+```env
+PIA_USER=your_pia_username
+PIA_PASS=your_pia_password
+PIA_LOCATION=switzerland
+INSTANCE_NAME=switzerland
+WEBUI_PORT=8081  # Different port!
+WEBUI_USERNAME=admin
+WEBUI_PASSWORD=your_password_here
+PUID=1000
+PGID=1000
+TZ=Etc/UTC
+```
+
+**~/qbit-instances/netherlands/.env:**
+```env
+PIA_USER=your_pia_username
+PIA_PASS=your_pia_password
+PIA_LOCATION=netherlands
+INSTANCE_NAME=netherlands
+WEBUI_PORT=8082  # Different port!
+WEBUI_USERNAME=admin
+WEBUI_PASSWORD=your_password_here
+PUID=1000
+PGID=1000
+TZ=Etc/UTC
+```
+
+Start each instance:
+```bash
+cd ~/qbit-instances/ireland && docker compose up -d
+cd ~/qbit-instances/switzerland && docker compose up -d
+cd ~/qbit-instances/netherlands && docker compose up -d
+```
+
+Access each WebUI:
+- Ireland: http://your-server:8080
+- Switzerland: http://your-server:8081
+- Netherlands: http://your-server:8082
+
+### Method 2: Single Directory with Docker Compose Projects
+
+Use Docker Compose project names to run multiple instances from the same directory:
+
+```bash
+# Start Ireland instance
+docker compose -p qbit-ireland up -d
+
+# Start Switzerland instance with different .env
+cp .env .env.switzerland
+# Edit .env.switzerland with different INSTANCE_NAME, WEBUI_PORT, etc.
+docker compose -p qbit-switzerland --env-file .env.switzerland up -d
+
+# Start Netherlands instance
+cp .env .env.netherlands
+# Edit .env.netherlands with different INSTANCE_NAME, WEBUI_PORT, etc.
+docker compose -p qbit-netherlands --env-file .env.netherlands up -d
+```
+
+### Multi-Instance Management
+
+**View all instances:**
+```bash
+docker ps --filter "name=qbittorrent\|pia-wireguard"
+```
+
+**Stop a specific instance:**
+```bash
+# Using separate directories
+cd ~/qbit-instances/ireland && docker compose down
+
+# Using project names
+docker compose -p qbit-ireland down
+```
+
+**Monitor all instances:**
+```bash
+# Check all forwarded ports
+docker exec pia-wireguard-ireland cat /pia-shared/port.dat
+docker exec pia-wireguard-switzerland cat /pia-shared/port.dat
+docker exec pia-wireguard-netherlands cat /pia-shared/port.dat
+
+# View logs for specific instance
+docker logs qbittorrent-ireland 2>&1 | grep "qbit-auto-config"
+```
+
+### Important Notes for Multiple Instances
+
+1. **Unique Ports:** Each instance MUST use a different `WEBUI_PORT`
+2. **Unique Instance Names:** Use different `INSTANCE_NAME` values to avoid container naming conflicts
+3. **Separate Volumes:** Each instance automatically gets separate Docker volumes (e.g., `qbittorrent-downloads-ireland`, `qbittorrent-downloads-switzerland`)
+4. **Resource Usage:** Each instance uses ~200-300MB RAM and minimal CPU, but monitor your system resources
+5. **VPN Connection Limits:** Check your PIA subscription for simultaneous connection limits
 
 ## How It Works
 
@@ -302,24 +460,44 @@ For Komodo, you may need to:
 2. **Firewall** - The PIA container has firewall enabled, dropping non-VPN traffic
 3. **UPnP disabled** - Prevents router from exposing your real IP
 4. **No split tunneling** - All qBittorrent traffic goes through VPN
+5. **WebUI credentials** - Always set a strong `WEBUI_PASSWORD` in your `.env` file
+6. **User permissions** - Proper `PUID`/`PGID` settings prevent privilege escalation
 
 ## Customization
 
+All major settings can be configured via the `.env` file:
+
 ### Change VPN location
 
-Edit the compose.yaml:
-```yaml
-environment:
-  - LOC=netherlands  # or any other PIA region
+```env
+PIA_LOCATION=netherlands  # or any other PIA region
 ```
 
 ### Change WebUI port
 
-```yaml
-environment:
-  - WEBUI_PORT=8090
-ports:
-  - "8090:8090"
+```env
+WEBUI_PORT=8090  # Automatically updates both container config and port mapping
+```
+
+### Change WebUI credentials
+
+```env
+WEBUI_USERNAME=myusername
+WEBUI_PASSWORD=my_secure_password_123
+```
+
+### Change user/group for file permissions
+
+```env
+# Get your IDs with: id $(whoami)
+PUID=1001
+PGID=1001
+```
+
+### Change timezone
+
+```env
+TZ=America/New_York  # or Europe/London, Asia/Tokyo, etc.
 ```
 
 ### Adjust connection limits
