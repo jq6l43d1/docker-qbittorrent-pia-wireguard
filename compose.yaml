@@ -41,6 +41,12 @@ services:
       # Note: BitTorrent peer port does not need Docker port mapping
       # Peers connect through the VPN tunnel, bypassing Docker's port mapping
       # qBittorrent is auto-configured to listen on PIA's forwarded port
+    healthcheck:
+      test: ["CMD", "sh", "-c", "ping -c 1 -W 3 1.1.1.1 > /dev/null 2>&1"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+      start_period: 45s
     restart: unless-stopped
 
   qbittorrent:
@@ -48,7 +54,8 @@ services:
     container_name: qbittorrent-${INSTANCE_NAME:-ireland}
     network_mode: "container:pia-wireguard-${INSTANCE_NAME:-ireland}"
     depends_on:
-      - pia-wireguard
+      pia-wireguard:
+        condition: service_healthy
     environment:
       # User/Group configuration
       - PUID=${PUID:-1000}
@@ -66,6 +73,12 @@ services:
       - pia-shared:/pia-shared:ro
       # Custom init scripts for auto-configuration
       - ./custom-init:/custom-cont-init.d:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${WEBUI_PORT:-8080}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     restart: unless-stopped
 
 volumes:

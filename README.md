@@ -367,6 +367,52 @@ docker logs qbittorrent 2>&1 | grep "qbit-auto-config"
 docker exec pia-wireguard-ireland curl https://ipinfo.io
 ```
 
+### Health Checks and Container Status
+
+Both containers have automatic health monitoring enabled:
+
+**View health status:**
+```bash
+# Quick status check
+docker compose ps
+
+# Detailed health check information
+docker inspect pia-wireguard-ireland | grep -A 10 Health
+docker inspect qbittorrent | grep -A 10 Health
+```
+
+**Health check behavior:**
+- **pia-wireguard**: Pings through the VPN tunnel every 1 minute
+  - If 3 consecutive pings fail (3 minutes), container is marked unhealthy
+  - Container will automatically restart due to `restart: unless-stopped` policy
+
+- **qbittorrent**: Checks WebUI responsiveness every 30 seconds
+  - If 3 consecutive checks fail (90 seconds), container is marked unhealthy
+  - qBittorrent waits for pia-wireguard to be healthy before starting
+
+**Healthy output looks like:**
+```
+NAME                        STATUS                   PORTS
+pia-wireguard-ireland      Up 10 minutes (healthy)  0.0.0.0:8080->8080/tcp
+qbittorrent-ireland        Up 9 minutes (healthy)
+```
+
+**Troubleshooting unhealthy containers:**
+```bash
+# View recent health check logs
+docker inspect pia-wireguard-ireland --format='{{json .State.Health}}' | jq
+
+# Check why health checks are failing
+docker logs pia-wireguard-ireland --tail 50
+docker logs qbittorrent --tail 50
+
+# Manually test VPN connectivity
+docker exec pia-wireguard-ireland ping -c 3 1.1.1.1
+
+# Manually test qBittorrent WebUI
+docker exec qbittorrent curl -f http://localhost:8080
+```
+
 ## No Docker Port Mapping Needed for Peer Connections
 
 **Important:** The BitTorrent peer port does **NOT** need to be in Docker's port mapping!
