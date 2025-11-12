@@ -8,18 +8,43 @@ PORT_FILE="/pia-shared/port.dat"
 # Wait for config directory to exist
 mkdir -p /config/qBittorrent
 
-# Wait for port file to be available (max 60 seconds)
+# Wait for port file to be available and fresh (max 90 seconds)
 WAIT_TIME=0
-while [ ! -f "$PORT_FILE" ] && [ $WAIT_TIME -lt 60 ]; do
-    echo "[qbit-auto-config] Waiting for PIA port forwarding... ($WAIT_TIME/60)"
-    sleep 2
-    WAIT_TIME=$((WAIT_TIME + 2))
+MAX_WAIT=90
+FILE_AGE=999
+
+echo "[qbit-auto-config] Waiting for PIA to establish port forwarding..."
+
+while [ $WAIT_TIME -lt $MAX_WAIT ]; do
+    if [ -f "$PORT_FILE" ]; then
+        # Check if file was modified in the last 60 seconds (fresh)
+        FILE_AGE=$(( $(date +%s) - $(stat -c %Y "$PORT_FILE" 2>/dev/null || echo 0) ))
+
+        if [ $FILE_AGE -lt 60 ]; then
+            echo "[qbit-auto-config] Found fresh port file (${FILE_AGE}s old)"
+            break
+        else
+            echo "[qbit-auto-config] Port file exists but is stale (${FILE_AGE}s old), waiting for update... ($WAIT_TIME/$MAX_WAIT)"
+        fi
+    else
+        echo "[qbit-auto-config] Waiting for port file... ($WAIT_TIME/$MAX_WAIT)"
+    fi
+
+    sleep 3
+    WAIT_TIME=$((WAIT_TIME + 3))
 done
 
 # Read the forwarded port
 if [ -f "$PORT_FILE" ]; then
     FORWARDED_PORT=$(cat "$PORT_FILE")
-    echo "[qbit-auto-config] Found PIA forwarded port: $FORWARDED_PORT"
+
+    # Validate port number
+    if [ -z "$FORWARDED_PORT" ] || ! [[ "$FORWARDED_PORT" =~ ^[0-9]+$ ]]; then
+        echo "[qbit-auto-config] WARNING: Invalid or empty port in file, using default 6881"
+        FORWARDED_PORT=6881
+    else
+        echo "[qbit-auto-config] Found PIA forwarded port: $FORWARDED_PORT (file age: ${FILE_AGE}s)"
+    fi
 
     # Wait for qBittorrent config to be created
     WAIT_TIME=0
