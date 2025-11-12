@@ -1,0 +1,28 @@
+# Runtime data
+/pia-shared/
+/qbittorrent-config/qBittorrent/qBittorrent.conf.bak
+
+# Environment variables
+.env
+
+# Temporary files
+*.tmp
+*.log
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.iml
+
+# Docker volumes (if accidentally created locally)
+/downloads/
+
+# Backup files
+*.bak
+*.backup

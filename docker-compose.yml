@@ -1,0 +1,67 @@
+name: pia-qbittorrent
+services:
+  pia-wireguard:
+    image: thrnz/docker-wireguard-pia
+    container_name: pia-wireguard-ireland
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    volumes:
+      - pia-shared:/pia-shared
+    environment:
+      # PIA Credentials (set in .env file)
+      - USER=${PIA_USER}
+      - PASS=${PIA_PASS}
+
+      # Server location (set in .env file, defaults to ireland)
+      - LOC=${PIA_LOCATION:-ireland}
+
+      # Port forwarding
+      - PORT_FORWARDING=1
+      - PORT_FILE=/pia-shared/port.dat
+      - PORT_PERSIST=1
+
+      # Network settings
+      - LOCAL_NETWORK=192.168.0.0/16,172.16.0.0/12
+      - KEEPALIVE=25
+
+      # Security
+      - FIREWALL=1
+      - EXIT_ON_FATAL=0
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    ports:
+      # qBittorrent WebUI (local access only)
+      - "8080:8080"
+      # Note: BitTorrent peer port does not need Docker port mapping
+      # Peers connect through the VPN tunnel, bypassing Docker's port mapping
+      # qBittorrent is auto-configured to listen on PIA's forwarded port
+    restart: unless-stopped
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    network_mode: "container:pia-wireguard-ireland"
+    depends_on:
+      - pia-wireguard
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - WEBUI_PORT=8080
+    volumes:
+      # Pre-configured qBittorrent config
+      - ./qbittorrent-config:/config
+      # Downloads directory
+      - qbittorrent-downloads:/downloads
+      # Access to PIA shared data (for reading forwarded port)
+      - pia-shared:/pia-shared:ro
+      # Custom init scripts for auto-configuration
+      - ./custom-init:/custom-cont-init.d:ro
+    restart: unless-stopped
+
+volumes:
+  pia-shared:
+  qbittorrent-downloads:
