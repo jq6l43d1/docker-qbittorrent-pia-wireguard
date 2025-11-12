@@ -53,6 +53,16 @@ if [ -f "$PORT_FILE" ]; then
         # Ensure UPnP is disabled
         sed -i "s/^Connection\\\\UPnP=.*/Connection\\\\UPnP=false/" "$QBIT_CONF"
 
+        # Configure WebUI port if provided
+        if [ -n "$WEBUI_PORT" ]; then
+            echo "[qbit-auto-config] Configuring WebUI port to $WEBUI_PORT..."
+            if grep -q "^WebUI\\\\Port=" "$QBIT_CONF"; then
+                sed -i "s/^WebUI\\\\\\\\Port=.*/WebUI\\\\\\\\Port=$WEBUI_PORT/" "$QBIT_CONF"
+            else
+                sed -i '/^\[Preferences\]/a WebUI\\Port='"$WEBUI_PORT" "$QBIT_CONF"
+            fi
+        fi
+
         # Configure WebUI credentials if provided
         if [ -n "$WEBUI_USERNAME" ] && [ -n "$WEBUI_PASSWORD" ]; then
             echo "[qbit-auto-config] Configuring WebUI credentials..."
