@@ -75,25 +75,50 @@ docker logs qbittorrent | grep "password"
 
 ### Available VPN Locations
 
-To see all available PIA server locations, run:
+**CRITICAL:** For qBittorrent to work properly with port forwarding, you **CANNOT use US locations**. All US servers do NOT support port forwarding, which results in slower speeds and fewer peer connections.
+
+#### List All Available Locations
+
+To see all available PIA server locations from the official server list:
+
 ```bash
-docker run --rm thrnz/docker-wireguard-pia ./get-regions.sh
+curl -s https://serverlist.piaservers.net/vpninfo/servers/v6 | \
+  python3 -c "
+import sys, json
+raw = sys.stdin.read()
+data = json.JSONDecoder().raw_decode(raw)[0]
+for r in sorted(data['regions'], key=lambda x: x['name']):
+    pf = '✓ YES' if r['port_forward'] else '✗ NO'
+    print(f\"{r['name']:35} ({r['country']}) - ID: {r['id']:25} - Port Forwarding: {pf}\")
+"
 ```
 
-Popular locations include:
-- `ireland` (default)
-- `uk_london`
-- `us_california`
-- `us_east`
-- `netherlands`
-- `germany`
-- `france`
-- `australia`
-- `japan`
+This will show all locations with their IDs and port forwarding support.
+
+#### Port Forwarding Summary
+
+- **✓ All international locations** (Europe, Asia, Canada, Australia, etc.) support port forwarding
+- **✗ All US locations** do NOT support port forwarding
+
+#### Recommended Locations (with port forwarding)
+
+Popular locations that support port forwarding:
+- `ireland` - Ireland (default)
+- `swiss` - Switzerland
+- `nl_amsterdam` - Netherlands
+- `uk` - UK London
+- `de_frankfurt` - Germany Frankfurt
+- `france` - France
+- `denmark` - Denmark
+- `sweden` - Sweden
+- `aus` - Australia Sydney
+- `japan` - Japan Tokyo
+- `sg` - Singapore
+- `ca_toronto` - Canada Toronto
 
 Set your preferred location in the `.env` file:
 ```env
-PIA_LOCATION=uk_london
+PIA_LOCATION=swiss
 ```
 
 ## Running Multiple Instances
