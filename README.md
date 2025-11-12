@@ -6,11 +6,13 @@ Fully automated Docker setup for qBittorrent with Private Internet Access (PIA) 
 
 ✅ **Automatic VPN binding** - qBittorrent automatically binds to `wg0` interface
 ✅ **Auto port forwarding** - Dynamically reads and configures PIA's forwarded port
+✅ **Automatic port monitoring** - Background service detects port changes and updates qBittorrent in real-time
 ✅ **UPnP disabled** - Prevents accidental IP leaks
 ✅ **Pre-configured settings** - Optimized for VPN usage out of the box
 ✅ **Persistent configuration** - Settings survive container restarts
 ✅ **No hardcoded ports** - Handles PIA's dynamic port changes automatically
 ✅ **Multi-instance support** - Run multiple instances on the same system with different VPN locations
+✅ **Health monitoring** - Automatic container restart on VPN or WebUI failures
 
 ## Quick Start
 
@@ -328,16 +330,28 @@ This ensures **all** qBittorrent traffic goes through the VPN interface. If the 
 
 ### Port Forwarding
 
-The init script automatically updates:
+Port forwarding is configured automatically in two ways:
+
+**1. At Container Startup**
+The init script configures the initial port:
 
 ```ini
 Connection\PortRangeMin=<forwarded_port>
 ```
 
-The port changes when:
+**2. Automatic Port Change Detection**
+A background monitoring service watches for port changes and automatically:
+- Detects when PIA assigns a new port
+- Updates qBittorrent configuration
+- Restarts qBittorrent process to apply changes
+- Logs all port changes for auditing
+
+Port changes occur when:
 - Container restarts
 - VPN reconnects
 - Port lease expires (every 60 days with PORT_PERSIST=1)
+
+With automatic monitoring, qBittorrent **always uses the current port** without manual intervention.
 
 ### UPnP Disabled
 
@@ -386,6 +400,35 @@ docker exec pia-wireguard-ireland cat /pia-shared/port.dat
 ```bash
 docker logs qbittorrent 2>&1 | grep "qbit-auto-config"
 ```
+
+### Monitor automatic port changes
+```bash
+# View port monitoring service logs
+docker logs qbittorrent 2>&1 | grep "port-monitor"
+
+# Watch for port changes in real-time
+docker logs -f qbittorrent 2>&1 | grep "port-monitor"
+
+# Check if monitoring service is running
+docker exec qbittorrent ps aux | grep "port-monitor"
+```
+
+When a port change is detected, you'll see logs like:
+```
+[port-monitor] ==========================================
+[port-monitor] PORT CHANGE DETECTED!
+[port-monitor] Old port: 12345
+[port-monitor] New port: 54321
+[port-monitor] ==========================================
+[port-monitor] Config backed up
+[port-monitor] Configuration updated successfully
+[port-monitor] Restarting qBittorrent process to apply changes...
+[port-monitor] qBittorrent restart triggered
+[port-monitor] Port updated from 12345 to 54321
+[port-monitor] ==========================================
+```
+
+**Note:** qBittorrent will briefly disconnect (typically <5 seconds) during port updates. Active torrents will pause momentarily and resume automatically.
 
 ### Verify VPN IP
 ```bash

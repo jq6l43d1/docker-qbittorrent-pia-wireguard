@@ -73,6 +73,8 @@ services:
       - pia-shared:/pia-shared:ro
       # Custom init scripts for auto-configuration
       - ./custom-init:/custom-cont-init.d:ro
+      # Port monitoring service (automatically updates port when PIA changes it)
+      - ./custom-services.d:/custom-services.d:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${WEBUI_PORT:-8080}"]
       interval: 30s
