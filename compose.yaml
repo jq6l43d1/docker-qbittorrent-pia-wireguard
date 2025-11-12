@@ -9,7 +9,7 @@ services:
     devices:
       - /dev/net/tun:/dev/net/tun
     volumes:
-      - pia-shared-${INSTANCE_NAME:-ireland}:/pia-shared
+      - pia-shared:/pia-shared
     environment:
       # PIA Credentials (set in .env file)
       - USER=${PIA_USER}
@@ -65,13 +65,15 @@ services:
       # Pre-configured qBittorrent config
       - ./qbittorrent-config:/config
       # Downloads directory (instance-specific)
-      - qbittorrent-downloads-${INSTANCE_NAME:-ireland}:/downloads
+      - qbittorrent-downloads:/downloads
       # Access to PIA shared data (for reading forwarded port)
-      - pia-shared-${INSTANCE_NAME:-ireland}:/pia-shared:ro
+      - pia-shared:/pia-shared:ro
       # Custom init scripts for auto-configuration
       - ./custom-init:/custom-cont-init.d:ro
     restart: unless-stopped
 
 volumes:
-  pia-shared-${INSTANCE_NAME:-ireland}:
-  qbittorrent-downloads-${INSTANCE_NAME:-ireland}:
+  pia-shared:
+    name: pia-shared-${INSTANCE_NAME:-ireland}
+  qbittorrent-downloads:
+    name: qbittorrent-downloads-${INSTANCE_NAME:-ireland}
