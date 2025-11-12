@@ -5,15 +5,6 @@ echo "[qbit-auto-config] Starting qBittorrent auto-configuration..."
 QBIT_CONF="/config/qBittorrent/qBittorrent.conf"
 PORT_FILE="/pia-shared/port.dat"
 
-# Validate WebUI password is set
-if [ -z "$WEBUI_PASSWORD" ]; then
-    echo "[qbit-auto-config] =========================================="
-    echo "[qbit-auto-config] WARNING: WEBUI_PASSWORD is not set!"
-    echo "[qbit-auto-config] qBittorrent will use default credentials."
-    echo "[qbit-auto-config] Please set WEBUI_PASSWORD in your .env file"
-    echo "[qbit-auto-config] =========================================="
-fi
-
 # Wait for config directory to exist
 mkdir -p /config/qBittorrent
 
@@ -61,46 +52,6 @@ if [ -f "$PORT_FILE" ]; then
             else
                 sed -i '/^\[Preferences\]/a WebUI\\Port='"$WEBUI_PORT" "$QBIT_CONF"
             fi
-        fi
-
-        # Configure WebUI credentials if provided
-        if [ -n "$WEBUI_USERNAME" ] && [ -n "$WEBUI_PASSWORD" ]; then
-            echo "[qbit-auto-config] Configuring WebUI credentials..."
-
-            # Generate password hash using Python (available in LinuxServer image)
-            SALT=$(python3 -c "import os, base64; print(base64.b64encode(os.urandom(16)).decode())")
-            PASS_HASH=$(python3 -c "
-import hashlib, base64
-password = '$WEBUI_PASSWORD'
-salt = base64.b64decode('$SALT')
-hash_obj = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 100000, 32)
-print(base64.b64encode(hash_obj).decode())
-")
-            FULL_HASH="@ByteArray($SALT:$PASS_HASH)"
-
-            # Update or add WebUI username
-            if grep -q "^WebUI\\\\Username=" "$QBIT_CONF"; then
-                sed -i "s/^WebUI\\\\\\\\Username=.*/WebUI\\\\\\\\Username=$WEBUI_USERNAME/" "$QBIT_CONF"
-            else
-                sed -i '/^\[Preferences\]/a WebUI\\Username='"$WEBUI_USERNAME" "$QBIT_CONF"
-            fi
-
-            # Update or add WebUI password
-            if grep -q "^WebUI\\\\Password_PBKDF2=" "$QBIT_CONF"; then
-                sed -i "s|^WebUI\\\\\\\\Password_PBKDF2=.*|WebUI\\\\\\\\Password_PBKDF2=\"$FULL_HASH\"|" "$QBIT_CONF"
-            else
-                sed -i '/^\[Preferences\]/a WebUI\\Password_PBKDF2="'"$FULL_HASH"'"' "$QBIT_CONF"
-            fi
-
-            # Ensure authentication is enabled
-            if grep -q "^WebUI\\\\AuthSubnetWhitelistEnabled=" "$QBIT_CONF"; then
-                sed -i "s/^WebUI\\\\\\\\AuthSubnetWhitelistEnabled=.*/WebUI\\\\\\\\AuthSubnetWhitelistEnabled=false/" "$QBIT_CONF"
-            else
-                sed -i '/^\[Preferences\]/a WebUI\\AuthSubnetWhitelistEnabled=false' "$QBIT_CONF"
-            fi
-
-            echo "[qbit-auto-config] - WebUI Username: $WEBUI_USERNAME"
-            echo "[qbit-auto-config] - WebUI Password: ****** (configured)"
         fi
 
         echo "[qbit-auto-config] Configuration updated successfully!"

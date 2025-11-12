@@ -57,10 +57,6 @@ services:
 
       # WebUI configuration
       - WEBUI_PORT=${WEBUI_PORT:-8080}
-
-      # WebUI credentials (passed to init script)
-      - WEBUI_USERNAME=${WEBUI_USERNAME:-admin}
-      - WEBUI_PASSWORD=${WEBUI_PASSWORD}
     volumes:
       # Pre-configured qBittorrent config
       - ./qbittorrent-config:/config

@@ -11,7 +11,6 @@ Fully automated Docker setup for qBittorrent with Private Internet Access (PIA) 
 ✅ **Persistent configuration** - Settings survive container restarts
 ✅ **No hardcoded ports** - Handles PIA's dynamic port changes automatically
 ✅ **Multi-instance support** - Run multiple instances on the same system with different VPN locations
-✅ **Configurable WebUI credentials** - Set your own username and password via environment variables
 
 ## Quick Start
 
@@ -49,10 +48,6 @@ PIA_LOCATION=ireland  # or your preferred location
 INSTANCE_NAME=ireland  # Used for container naming
 WEBUI_PORT=8080        # Port for accessing WebUI
 
-# WebUI Credentials (IMPORTANT: Set a strong password!)
-WEBUI_USERNAME=admin
-WEBUI_PASSWORD=your_secure_password_here
-
 # User/Group IDs (get with: id $(whoami))
 PUID=1000
 PGID=1000
@@ -60,8 +55,6 @@ PGID=1000
 # Timezone
 TZ=Etc/UTC
 ```
-
-**Security Note:** Always set a strong `WEBUI_PASSWORD`! This protects your qBittorrent WebUI from unauthorized access.
 
 3. Deploy the stack:
 ```bash
@@ -75,8 +68,9 @@ docker exec pia-wireguard-ireland cat /pia-shared/port.dat
 
 # Access qBittorrent WebUI
 # http://your-server:8080
-# Username: from WEBUI_USERNAME in .env (default: admin)
-# Password: from WEBUI_PASSWORD in .env
+# Username: admin
+# Password: Check logs for temporary password on first start
+docker logs qbittorrent | grep "password"
 ```
 
 ### Available VPN Locations
@@ -139,8 +133,6 @@ PIA_PASS=your_pia_password
 PIA_LOCATION=ireland
 INSTANCE_NAME=ireland
 WEBUI_PORT=8080
-WEBUI_USERNAME=admin
-WEBUI_PASSWORD=your_password_here
 PUID=1000
 PGID=1000
 TZ=Etc/UTC
@@ -153,8 +145,6 @@ PIA_PASS=your_pia_password
 PIA_LOCATION=switzerland
 INSTANCE_NAME=switzerland
 WEBUI_PORT=8081  # Different port!
-WEBUI_USERNAME=admin
-WEBUI_PASSWORD=your_password_here
 PUID=1000
 PGID=1000
 TZ=Etc/UTC
@@ -167,8 +157,6 @@ PIA_PASS=your_pia_password
 PIA_LOCATION=netherlands
 INSTANCE_NAME=netherlands
 WEBUI_PORT=8082  # Different port!
-WEBUI_USERNAME=admin
-WEBUI_PASSWORD=your_password_here
 PUID=1000
 PGID=1000
 TZ=Etc/UTC
@@ -460,7 +448,7 @@ For Komodo, you may need to:
 2. **Firewall** - The PIA container has firewall enabled, dropping non-VPN traffic
 3. **UPnP disabled** - Prevents router from exposing your real IP
 4. **No split tunneling** - All qBittorrent traffic goes through VPN
-5. **WebUI credentials** - Always set a strong `WEBUI_PASSWORD` in your `.env` file
+5. **WebUI security** - Change the default password in Tools → Options → Web UI after first login
 6. **User permissions** - Proper `PUID`/`PGID` settings prevent privilege escalation
 
 ## Customization
@@ -479,12 +467,13 @@ PIA_LOCATION=netherlands  # or any other PIA region
 WEBUI_PORT=8090  # Automatically updates both container config and port mapping
 ```
 
-### Change WebUI credentials
+### Change WebUI password
 
-```env
-WEBUI_USERNAME=myusername
-WEBUI_PASSWORD=my_secure_password_123
-```
+Change the password in the WebUI after first login:
+1. Access WebUI and login with the temporary password from logs
+2. Go to Tools → Options → Web UI
+3. Set a new username and password
+4. Click Save
 
 ### Change user/group for file permissions
 
