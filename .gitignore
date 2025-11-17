@@ -1,9 +1,12 @@
 # Runtime data
 /pia-shared/
 /qbittorrent-config/qBittorrent/qBittorrent.conf.bak
+/qbittorrent-config/qBittorrent/qBittorrent.conf.backup-*
 
 # Environment variables
 .env
+.env.*
+!.env.example
 
 # Temporary files
 *.tmp

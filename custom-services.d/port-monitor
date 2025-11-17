@@ -1,0 +1,75 @@
+#!/usr/bin/with-contenv bash
+
+QBIT_CONF="/config/qBittorrent/qBittorrent.conf"
+PORT_FILE="/pia-shared/port.dat"
+CHECK_INTERVAL=60
+
+echo "[port-monitor] Starting automatic port monitoring service..."
+echo "[port-monitor] Checking for port changes every ${CHECK_INTERVAL} seconds"
+
+# Wait for qBittorrent to initialize before starting monitoring
+sleep 30
+
+while true; do
+    sleep $CHECK_INTERVAL
+
+    # Check if port file exists
+    if [ ! -f "$PORT_FILE" ]; then
+        continue
+    fi
+
+    # Read the current forwarded port from PIA
+    NEW_PORT=$(cat "$PORT_FILE" 2>/dev/null | tr -d '[:space:]')
+
+    # Validate port number
+    if [ -z "$NEW_PORT" ] || ! [[ "$NEW_PORT" =~ ^[0-9]+$ ]]; then
+        continue
+    fi
+
+    # Check if qBittorrent config exists
+    if [ ! -f "$QBIT_CONF" ]; then
+        continue
+    fi
+
+    # Read current port from qBittorrent config
+    CONFIG_PORT=$(grep "^Connection\\\\PortRangeMin=" "$QBIT_CONF" 2>/dev/null | cut -d'=' -f2 | tr -d '[:space:]')
+
+    # If config port is empty or invalid, skip this check
+    if [ -z "$CONFIG_PORT" ] || ! [[ "$CONFIG_PORT" =~ ^[0-9]+$ ]]; then
+        continue
+    fi
+
+    # Check if port has changed
+    if [ "$CONFIG_PORT" != "$NEW_PORT" ]; then
+        echo "[port-monitor] =========================================="
+        echo "[port-monitor] PORT CHANGE DETECTED!"
+        echo "[port-monitor] Old port: $CONFIG_PORT"
+        echo "[port-monitor] New port: $NEW_PORT"
+        echo "[port-monitor] =========================================="
+
+        # Backup config before modification
+        cp "$QBIT_CONF" "${QBIT_CONF}.backup-$(date +%Y%m%d-%H%M%S)"
+        echo "[port-monitor] Config backed up"
+
+        # Update port in configuration
+        sed -i "s/^Connection\\\\PortRangeMin=.*/Connection\\\\PortRangeMin=$NEW_PORT/" "$QBIT_CONF"
+
+        # Verify the update was successful
+        UPDATED_PORT=$(grep "^Connection\\\\PortRangeMin=" "$QBIT_CONF" 2>/dev/null | cut -d'=' -f2 | tr -d '[:space:]')
+
+        if [ "$UPDATED_PORT" = "$NEW_PORT" ]; then
+            echo "[port-monitor] Configuration updated successfully"
+            echo "[port-monitor] Restarting qBittorrent process to apply changes..."
+
+            # Find and kill qBittorrent process (s6 will automatically restart it)
+            pkill -TERM qbittorrent-nox
+
+            echo "[port-monitor] qBittorrent restart triggered"
+            echo "[port-monitor] Port updated from $CONFIG_PORT to $NEW_PORT"
+            echo "[port-monitor] =========================================="
+        else
+            echo "[port-monitor] ERROR: Failed to update configuration!"
+            echo "[port-monitor] Expected: $NEW_PORT, Got: $UPDATED_PORT"
+        fi
+    fi
+done
