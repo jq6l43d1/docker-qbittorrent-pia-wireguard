@@ -65,8 +65,8 @@ services:
       # WebUI configuration
       - WEBUI_PORT=${WEBUI_PORT:-8080}
     volumes:
-      # Pre-configured qBittorrent config
-      - ./qbittorrent-config:/config
+      # qBittorrent config (instance-specific Docker volume)
+      - qbittorrent-config:/config
       # Downloads directory (instance-specific)
       - /alexandria/${INSTANCE_NAME}:/downloads
       # Access to PIA shared data (for reading forwarded port)
@@ -86,3 +86,5 @@ services:
 volumes:
   pia-shared:
     name: pia-shared-${INSTANCE_NAME}
+  qbittorrent-config:
+    name: qbittorrent-config-${INSTANCE_NAME}
