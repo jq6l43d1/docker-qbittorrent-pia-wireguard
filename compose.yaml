@@ -2,7 +2,7 @@ name: pia-qbittorrent
 services:
   pia-wireguard:
     image: thrnz/docker-wireguard-pia
-    container_name: pia-wireguard-${INSTANCE_NAME:-ireland}
+    container_name: pia-wireguard-${INSTANCE_NAME}
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
@@ -15,8 +15,8 @@ services:
       - USER=${PIA_USER}
       - PASS=${PIA_PASS}
 
-      # Server location (set in .env file, defaults to ireland)
-      - LOC=${PIA_LOCATION:-ireland}
+      # Server location (set in .env file)
+      - LOC=${PIA_LOCATION}
 
       # Port forwarding
       - PORT_FORWARDING=1
@@ -51,8 +51,8 @@ services:
 
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
-    container_name: qbittorrent-${INSTANCE_NAME:-ireland}
-    network_mode: "container:pia-wireguard-${INSTANCE_NAME:-ireland}"
+    container_name: qbittorrent-${INSTANCE_NAME}
+    network_mode: "container:pia-wireguard-${INSTANCE_NAME}"
     depends_on:
       pia-wireguard:
         condition: service_healthy
@@ -68,7 +68,7 @@ services:
       # Pre-configured qBittorrent config
       - ./qbittorrent-config:/config
       # Downloads directory (instance-specific)
-      - qbittorrent-downloads:/downloads
+      - /alexandria/${INSTANCE_NAME}:/downloads
       # Access to PIA shared data (for reading forwarded port)
       - pia-shared:/pia-shared:ro
       # Custom init scripts for auto-configuration
@@ -85,6 +85,4 @@ services:
 
 volumes:
   pia-shared:
-    name: pia-shared-${INSTANCE_NAME:-ireland}
-  qbittorrent-downloads:
-    name: qbittorrent-downloads-${INSTANCE_NAME:-ireland}
+    name: pia-shared-${INSTANCE_NAME}
