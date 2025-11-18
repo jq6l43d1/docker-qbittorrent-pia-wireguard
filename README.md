@@ -292,7 +292,7 @@ volumes:
   - ./custom-init:/custom-cont-init.d:ro
 
   # Downloads (Docker volume)
-  - qbittorrent-downloads:/downloads
+  - /alexandria/${INSTANCE_NAME}:/downloads
 ```
 
 ## File Structure
@@ -381,7 +381,7 @@ If you want direct filesystem access, change the compose.yaml:
 
 ```yaml
 volumes:
-  - ./downloads:/downloads  # Instead of qbittorrent-downloads:/downloads
+  - ./downloads:/downloads  # Instead of /alexandria/${INSTANCE_NAME}:/downloads
 ```
 
 ## Monitoring
