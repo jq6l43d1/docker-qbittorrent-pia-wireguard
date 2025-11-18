@@ -44,10 +44,10 @@ Your `.env` file should contain:
 # PIA Credentials
 PIA_USER=your_actual_username
 PIA_PASS=your_actual_password
-PIA_LOCATION=ireland  # or your preferred location
+PIA_LOCATION=denmark  # Choose from available locations
 
 # Instance Configuration
-INSTANCE_NAME=ireland  # Used for container naming
+INSTANCE_NAME=tv-01    # Used for container naming
 WEBUI_PORT=8080        # Port for accessing WebUI
 
 # User/Group IDs (get with: id $(whoami))
@@ -66,7 +66,7 @@ docker-compose up -d
 docker logs qbittorrent | grep "qbit-auto-config"
 
 # Get the current forwarded port
-docker exec pia-wireguard-ireland cat /pia-shared/port.dat
+docker exec pia-wireguard-${INSTANCE_NAME} cat /pia-shared/port.dat
 
 # Access qBittorrent WebUI
 # http://your-server:8080
@@ -105,8 +105,9 @@ This will show all locations with their IDs and port forwarding support.
 #### Recommended Locations (with port forwarding)
 
 Popular locations that support port forwarding:
-- `ireland` - Ireland (default)
+- `denmark` - Denmark
 - `swiss` - Switzerland
+- `ireland` - Ireland
 - `nl_amsterdam` - Netherlands
 - `uk` - UK London
 - `de_frankfurt` - Germany Frankfurt
@@ -138,51 +139,51 @@ Create separate directories for each instance:
 
 ```bash
 # Create directory structure
-mkdir -p ~/qbit-instances/{ireland,switzerland,netherlands}
+mkdir -p ~/qbit-instances/{tv-01,movies-01,books-01}
 
 # Clone or copy to each location
-cd ~/qbit-instances/ireland
+cd ~/qbit-instances/tv-01
 git clone https://github.com/yourusername/docker-qbittorrent-pia-wireguard.git .
 
-cd ~/qbit-instances/switzerland
+cd ~/qbit-instances/movies-01
 git clone https://github.com/yourusername/docker-qbittorrent-pia-wireguard.git .
 
-cd ~/qbit-instances/netherlands
+cd ~/qbit-instances/books-01
 git clone https://github.com/yourusername/docker-qbittorrent-pia-wireguard.git .
 ```
 
 Configure each instance with unique settings:
 
-**~/qbit-instances/ireland/.env:**
+**~/qbit-instances/tv-01/.env:**
 ```env
 PIA_USER=your_pia_username
 PIA_PASS=your_pia_password
-PIA_LOCATION=ireland
-INSTANCE_NAME=ireland
+PIA_LOCATION=denmark
+INSTANCE_NAME=tv-01
 WEBUI_PORT=8080
 PUID=1000
 PGID=1000
 TZ=Etc/UTC
 ```
 
-**~/qbit-instances/switzerland/.env:**
+**~/qbit-instances/movies-01/.env:**
 ```env
 PIA_USER=your_pia_username
 PIA_PASS=your_pia_password
-PIA_LOCATION=switzerland
-INSTANCE_NAME=switzerland
+PIA_LOCATION=mexico
+INSTANCE_NAME=movies-01
 WEBUI_PORT=8081  # Different port!
 PUID=1000
 PGID=1000
 TZ=Etc/UTC
 ```
 
-**~/qbit-instances/netherlands/.env:**
+**~/qbit-instances/books-01/.env:**
 ```env
 PIA_USER=your_pia_username
 PIA_PASS=your_pia_password
-PIA_LOCATION=netherlands
-INSTANCE_NAME=netherlands
+PIA_LOCATION=switzerland
+INSTANCE_NAME=books-01
 WEBUI_PORT=8082  # Different port!
 PUID=1000
 PGID=1000
@@ -191,33 +192,33 @@ TZ=Etc/UTC
 
 Start each instance:
 ```bash
-cd ~/qbit-instances/ireland && docker compose up -d
-cd ~/qbit-instances/switzerland && docker compose up -d
-cd ~/qbit-instances/netherlands && docker compose up -d
+cd ~/qbit-instances/tv-01 && docker compose up -d
+cd ~/qbit-instances/movies-01 && docker compose up -d
+cd ~/qbit-instances/books-01 && docker compose up -d
 ```
 
 Access each WebUI:
-- Ireland: http://your-server:8080
-- Switzerland: http://your-server:8081
-- Netherlands: http://your-server:8082
+- TV: http://your-server:8080
+- Movies: http://your-server:8081
+- Books: http://your-server:8082
 
 ### Method 2: Single Directory with Docker Compose Projects
 
 Use Docker Compose project names to run multiple instances from the same directory:
 
 ```bash
-# Start Ireland instance
-docker compose -p qbit-ireland up -d
+# Start first instance
+docker compose -p qbit-tv-01 up -d
 
-# Start Switzerland instance with different .env
-cp .env .env.switzerland
-# Edit .env.switzerland with different INSTANCE_NAME, WEBUI_PORT, etc.
-docker compose -p qbit-switzerland --env-file .env.switzerland up -d
+# Start second instance with different .env
+cp .env .env.movies
+# Edit .env.movies with different INSTANCE_NAME, WEBUI_PORT, etc.
+docker compose -p qbit-movies-01 --env-file .env.movies up -d
 
-# Start Netherlands instance
-cp .env .env.netherlands
-# Edit .env.netherlands with different INSTANCE_NAME, WEBUI_PORT, etc.
-docker compose -p qbit-netherlands --env-file .env.netherlands up -d
+# Start third instance
+cp .env .env.books
+# Edit .env.books with different INSTANCE_NAME, WEBUI_PORT, etc.
+docker compose -p qbit-books-01 --env-file .env.books up -d
 ```
 
 ### Multi-Instance Management
@@ -230,43 +231,48 @@ docker ps --filter "name=qbittorrent\|pia-wireguard"
 **Stop a specific instance:**
 ```bash
 # Using separate directories
-cd ~/qbit-instances/ireland && docker compose down
+cd ~/qbit-instances/tv-01 && docker compose down
 
 # Using project names
-docker compose -p qbit-ireland down
+docker compose -p qbit-tv-01 down
 ```
 
 **Monitor all instances:**
 ```bash
 # Check all forwarded ports
-docker exec pia-wireguard-ireland cat /pia-shared/port.dat
-docker exec pia-wireguard-switzerland cat /pia-shared/port.dat
-docker exec pia-wireguard-netherlands cat /pia-shared/port.dat
+docker exec pia-wireguard-tv-01 cat /pia-shared/port.dat
+docker exec pia-wireguard-movies-01 cat /pia-shared/port.dat
+docker exec pia-wireguard-books-01 cat /pia-shared/port.dat
 
 # View logs for specific instance
-docker logs qbittorrent-ireland 2>&1 | grep "qbit-auto-config"
+docker logs qbittorrent-tv-01 2>&1 | grep "qbit-auto-config"
 ```
 
 ### Important Notes for Multiple Instances
 
 1. **Unique Ports:** Each instance MUST use a different `WEBUI_PORT`
 2. **Unique Instance Names:** Use different `INSTANCE_NAME` values to avoid container naming conflicts
-3. **Separate Volumes:** Each instance automatically gets separate Docker volumes (e.g., `qbittorrent-downloads-ireland`, `qbittorrent-downloads-switzerland`)
+3. **Separate Volumes:** Each instance automatically gets separate Docker volumes:
+   - Config: `qbittorrent-config-${INSTANCE_NAME}` (isolated settings, prevents lockfile conflicts)
+   - PIA shared: `pia-shared-${INSTANCE_NAME}` (VPN port forwarding data)
+   - Downloads can be bind-mounted to host directories (e.g., `/path/to/downloads/${INSTANCE_NAME}`)
 4. **Resource Usage:** Each instance uses ~200-300MB RAM and minimal CPU, but monitor your system resources
 5. **VPN Connection Limits:** Check your PIA subscription for simultaneous connection limits
 
 ## How It Works
 
-### 1. Pre-configured Settings
+### 1. Instance-Specific Configuration
 
-The `qbittorrent-config/qBittorrent/qBittorrent.conf` file contains pre-configured settings:
+Each instance gets its own isolated configuration in a Docker volume (`qbittorrent-config-${INSTANCE_NAME}`):
 
-- **Network Interface**: `wg0` (VPN interface)
-- **UPnP**: Disabled
-- **Port**: Default 6881 (auto-updated on startup)
+- **Network Interface**: `wg0` (VPN interface) - auto-configured by init script
+- **UPnP**: Disabled - prevents IP leaks
+- **Port**: Default 6881 (auto-updated on startup to match PIA's forwarded port)
 - **Protocol settings**: DHT, PeX, LSD enabled
 - **Encryption**: Enabled
 - **Connection limits**: Optimized
+
+The init script automatically configures these settings on first startup. Each instance's configuration is completely isolated, preventing lockfile and socket conflicts between instances.
 
 ### 2. Automatic Port Configuration
 
@@ -282,8 +288,8 @@ The custom init script (`custom-init/99-update-qbit-port.sh`) runs on container 
 
 ```yaml
 volumes:
-  # Pre-configured qBittorrent settings
-  - ./qbittorrent-config:/config
+  # Instance-specific qBittorrent config (Docker volume)
+  - qbittorrent-config:/config
 
   # Access to PIA port information
   - pia-shared:/pia-shared:ro
@@ -291,9 +297,14 @@ volumes:
   # Custom initialization script
   - ./custom-init:/custom-cont-init.d:ro
 
-  # Downloads (Docker volume)
-  - /alexandria/${INSTANCE_NAME}:/downloads
+  # Custom services (port monitoring)
+  - ./custom-services.d:/custom-services.d:ro
+
+  # Downloads (bind mount to host or Docker volume)
+  - /path/to/downloads/${INSTANCE_NAME}:/downloads
 ```
+
+**Config Volume:** Each instance uses its own `qbittorrent-config-${INSTANCE_NAME}` Docker volume. This prevents multiple instances from conflicting over lockfiles and IPC sockets.
 
 ## File Structure
 
@@ -302,13 +313,14 @@ docker-qbittorrent-pia-wireguard/
 ├── compose.yaml                            # Main compose file
 ├── .env.example                            # Environment variables template
 ├── .env                                    # Your credentials (create from .env.example)
-├── qbittorrent-config/                     # Pre-configured settings
+├── qbittorrent-config/                     # Example config (reference only)
 │   └── qBittorrent/
-│       └── qBittorrent.conf                # qBittorrent configuration
+│       └── qBittorrent.conf                # Default configuration template
 ├── custom-init/                            # Auto-configuration scripts
 │   └── 99-update-qbit-port.sh             # Port update script
+├── custom-services.d/                      # Background services
+│   └── port-monitor                        # Automatic port change detection
 ├── README.md                               # This file
-├── CHANGES-DYNAMIC-PORT.md                # Technical details
 └── LICENSE                                 # MIT License
 ```
 
@@ -393,7 +405,7 @@ docker exec qbittorrent cat /config/qBittorrent/qBittorrent.conf | grep -A3 "Con
 
 ### Check current forwarded port
 ```bash
-docker exec pia-wireguard-ireland cat /pia-shared/port.dat
+docker exec pia-wireguard-${INSTANCE_NAME} cat /pia-shared/port.dat
 ```
 
 ### View auto-configuration logs
@@ -432,7 +444,7 @@ When a port change is detected, you'll see logs like:
 
 ### Verify VPN IP
 ```bash
-docker exec pia-wireguard-ireland curl https://ipinfo.io
+docker exec pia-wireguard-${INSTANCE_NAME} curl https://ipinfo.io
 ```
 
 ### Health Checks and Container Status
@@ -445,8 +457,8 @@ Both containers have automatic health monitoring enabled:
 docker compose ps
 
 # Detailed health check information
-docker inspect pia-wireguard-ireland | grep -A 10 Health
-docker inspect qbittorrent | grep -A 10 Health
+docker inspect pia-wireguard-${INSTANCE_NAME} | grep -A 10 Health
+docker inspect qbittorrent-${INSTANCE_NAME} | grep -A 10 Health
 ```
 
 **Health check behavior:**
@@ -461,24 +473,24 @@ docker inspect qbittorrent | grep -A 10 Health
 **Healthy output looks like:**
 ```
 NAME                        STATUS                   PORTS
-pia-wireguard-ireland      Up 10 minutes (healthy)  0.0.0.0:8080->8080/tcp
-qbittorrent-ireland        Up 9 minutes (healthy)
+pia-wireguard-tv-01        Up 10 minutes (healthy)  0.0.0.0:8080->8080/tcp
+qbittorrent-tv-01          Up 9 minutes (healthy)
 ```
 
 **Troubleshooting unhealthy containers:**
 ```bash
 # View recent health check logs
-docker inspect pia-wireguard-ireland --format='{{json .State.Health}}' | jq
+docker inspect pia-wireguard-${INSTANCE_NAME} --format='{{json .State.Health}}' | jq
 
 # Check why health checks are failing
-docker logs pia-wireguard-ireland --tail 50
-docker logs qbittorrent --tail 50
+docker logs pia-wireguard-${INSTANCE_NAME} --tail 50
+docker logs qbittorrent-${INSTANCE_NAME} --tail 50
 
 # Manually test VPN connectivity
-docker exec pia-wireguard-ireland ping -c 3 1.1.1.1
+docker exec pia-wireguard-${INSTANCE_NAME} ping -c 3 1.1.1.1
 
 # Manually test qBittorrent WebUI
-docker exec qbittorrent curl -f http://localhost:8080
+docker exec qbittorrent-${INSTANCE_NAME} curl -f http://localhost:${WEBUI_PORT}
 ```
 
 ## No Docker Port Mapping Needed for Peer Connections
@@ -542,19 +554,19 @@ Connection\InterfaceName=wg0
 
 Stop the VPN container and verify qBittorrent stops all traffic:
 ```bash
-docker stop pia-wireguard-ireland
+docker stop pia-wireguard-${INSTANCE_NAME}
 ```
 
 qBittorrent should show all torrents as "stalled" - this means it's properly bound to the VPN interface.
 
 ### Configuration not persisting
 
-If you're using Komodo or deploying to a remote server, ensure the `./qbittorrent-config` and `./custom-init` directories exist on the server at the compose file location.
+Configuration is stored in Docker volumes (`qbittorrent-config-${INSTANCE_NAME}`), so it persists across container recreations.
 
-For Komodo, you may need to:
-1. Create these directories on the server first
-2. Upload the files via SCP or Komodo's file manager
-3. Then deploy the stack
+If using a management platform like Komodo:
+1. Ensure the `./custom-init` and `./custom-services.d` directories are accessible to the deployment
+2. Each instance's configuration is isolated in its own Docker volume
+3. To reset an instance's config, remove its volume: `docker volume rm qbittorrent-config-instance-name`
 
 ## Security Notes
 
@@ -605,10 +617,13 @@ TZ=America/New_York  # or Europe/London, Asia/Tokyo, etc.
 
 ### Adjust connection limits
 
-Edit `qbittorrent-config/qBittorrent/qBittorrent.conf`:
-```ini
-Connection\GlobalMaxConnections=1000
-Connection\MaxConnectionsPerTorrent=256
+Modify settings via WebUI (Tools → Options → Connection) or by editing the config in the Docker volume:
+```bash
+# Find the volume path
+docker volume inspect qbittorrent-config-instance-name
+
+# Edit the config (requires container restart)
+docker exec qbittorrent-instance-name vi /config/qBittorrent/qBittorrent.conf
 ```
 
 ### Change download location
@@ -626,7 +641,7 @@ If you need to manually configure additional settings:
 1. Access WebUI at http://your-server:8080
 2. Go to Tools → Options
 3. Make changes
-4. Changes persist in `./qbittorrent-config/qBittorrent/qBittorrent.conf`
+4. Changes persist in the instance's Docker volume (`qbittorrent-config-${INSTANCE_NAME}`)
 
 **Note**: The init script will override:
 - Port settings (reads from PIA)
@@ -639,8 +654,8 @@ Other settings you configure manually will persist.
 
 After deployment, verify:
 
-- [ ] VPN connected: `docker logs pia-wireguard-ireland | grep "successfully started"`
-- [ ] Port forwarding active: `docker exec pia-wireguard-ireland cat /pia-shared/port.dat`
+- [ ] VPN connected: `docker logs pia-wireguard-${INSTANCE_NAME} | grep "successfully started"`
+- [ ] Port forwarding active: `docker exec pia-wireguard-${INSTANCE_NAME} cat /pia-shared/port.dat`
 - [ ] qBittorrent running: `docker ps | grep qbittorrent`
 - [ ] Auto-config ran: `docker logs qbittorrent | grep "qbit-auto-config"`
 - [ ] WebUI accessible: http://your-server:8080
