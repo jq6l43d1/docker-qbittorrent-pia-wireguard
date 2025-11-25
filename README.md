@@ -14,6 +14,33 @@ Fully automated Docker setup for qBittorrent with Private Internet Access (PIA) 
 ✅ **Multi-instance support** - Run multiple instances on the same system with different VPN locations
 ✅ **Health monitoring** - Automatic container restart on VPN or WebUI failures
 
+## Use Case: Scalable Long-Term Seeding
+
+This project is designed for **indefinite seeding with horizontal scaling**. The strategy:
+
+1. **Seed forever** - Use hardlinks so files exist in both your media library and qBittorrent's download folder without using extra disk space. Deleting from your library doesn't affect seeding.
+
+2. **Scale when saturated** - When your upload bandwidth to one VPN server maxes out, spin up a new stack on a different VPN location. The old stack keeps seeding existing torrents.
+
+3. **Repeat** - Each stack is independent with its own VPN connection. Add stacks as needed to maximize your seeding capacity.
+
+**Example progression:**
+```
+Week 1:  Stack 1 (Denmark)     → 50 torrents, 80% upload capacity
+Week 4:  Stack 1 (Denmark)     → 200 torrents, 100% upload (saturated)
+         Stack 2 (Switzerland) → New downloads go here
+Week 8:  Stack 1 (Denmark)     → 200 torrents, still seeding
+         Stack 2 (Switzerland) → 150 torrents, 100% upload (saturated)
+         Stack 3 (Netherlands) → New downloads go here
+```
+
+Each stack maintains its own:
+- VPN tunnel with unique forwarded port
+- qBittorrent instance with separate config
+- Download directory (can use hardlinks to shared media library)
+
+This architecture lets you contribute back to the torrent community at scale while keeping your media library organized with Sonarr/Radarr.
+
 ## Quick Start
 
 ### Prerequisites
