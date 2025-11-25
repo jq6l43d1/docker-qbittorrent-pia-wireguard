@@ -67,8 +67,8 @@ services:
     volumes:
       # qBittorrent config (instance-specific Docker volume)
       - qbittorrent-config:/config
-      # Downloads directory (instance-specific)
-      - /alexandria/${INSTANCE_NAME}:/downloads
+      # Downloads directory (shared with Sonarr for hardlinks)
+      - /data:/data
       # Access to PIA shared data (for reading forwarded port)
       - pia-shared:/pia-shared:ro
       # Custom init scripts for auto-configuration
