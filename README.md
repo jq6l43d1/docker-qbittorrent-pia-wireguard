@@ -396,6 +396,120 @@ volumes:
   - ./downloads:/downloads  # Instead of /alexandria/${INSTANCE_NAME}:/downloads
 ```
 
+## Hardlink Support for Sonarr/Radarr
+
+When using qBittorrent with Sonarr, Radarr, or other *arr apps, you want **hardlinks** instead of copies. Hardlinks allow the file to exist in both the download location (for seeding) and the media library without using extra disk space.
+
+### Why Hardlinks Fail
+
+Hardlinks **cannot cross mount point boundaries**. If your downloads and media library are separate mounts, the *arr app will copy files instead of hardlinking them.
+
+**Example of broken setup:**
+```
+/downloads  → mounted from /alexandria/tv-01
+/tv         → mounted from /alexandria/tv
+```
+Even though both are on the same physical disk, they're separate mounts, so hardlinks fail.
+
+### Solution: Single Mount Point
+
+Mount a common parent directory to both containers, then configure applications to use subdirectories under that single mount.
+
+### Proxmox LXC Setup
+
+If running qBittorrent in a Docker container inside an LXC, and Sonarr in another LXC:
+
+**Step 1: Configure LXC Mount Points**
+
+Both containers need the same storage mounted at the same path:
+
+```bash
+# Container running Docker (qBittorrent)
+# /etc/pve/lxc/105.conf
+mp0: /alexandria,mp=/data
+
+# Container running Sonarr
+# /etc/pve/lxc/100.conf
+mp0: /alexandria,mp=/data
+```
+
+**Step 2: Update Docker Compose**
+
+Change the volume mount from instance-specific to the shared `/data`:
+
+```yaml
+# compose.yaml
+volumes:
+  - /data:/data  # Instead of /alexandria/${INSTANCE_NAME}:/downloads
+```
+
+**Step 3: Configure qBittorrent**
+
+In qBittorrent WebUI → Settings → Downloads:
+- **Default Save Path:** `/data/tv-01` (or your instance folder)
+
+**Step 4: Configure Sonarr**
+
+1. **Root Folders:** Settings → Media Management → Root Folders
+   - Add: `/data/tv`
+
+2. **Download Client:** Settings → Download Clients → qBittorrent
+   - No remote path mapping needed (paths are now identical)
+
+3. **Existing Series:** Series → Mass Editor
+   - Select all → Change Root Folder to `/data/tv`
+
+### Path Mapping Summary
+
+| Component | Path | Maps To (Host) |
+|-----------|------|----------------|
+| qBittorrent downloads | `/data/tv-01` | `/alexandria/tv-01` |
+| Sonarr library | `/data/tv` | `/alexandria/tv` |
+| Sonarr sees downloads | `/data/tv-01` | `/alexandria/tv-01` |
+
+Both paths share the `/data` mount point, enabling hardlinks.
+
+### Verify Hardlinks Are Working
+
+**Method 1: Check Sonarr Activity**
+
+After importing, Sonarr's Activity log should show:
+- ✅ "Hardlinking movie file" (working)
+- ❌ "Copying movie file" (not working)
+
+**Method 2: Compare Inodes**
+
+Files with the same inode number are hardlinked:
+
+```bash
+# Run in Sonarr container
+ls -li /data/tv/ShowName/Season\ 1/episode.mkv /data/tv-01/episode.mkv
+```
+
+Output showing same inode (first column):
+```
+15959 -rw-r--r-- 2 1000 1000 193098726 Nov 25 15:00 /data/tv-01/episode.mkv
+15959 -rw-r--r-- 2 1000 1000 193098726 Nov 25 15:00 /data/tv/ShowName/Season 1/episode.mkv
+```
+
+The `2` in the third column indicates 2 hardlinks to the same file.
+
+### Multiple Instances
+
+For multiple qBittorrent instances (tv-01, movies-01, books-01), use the same `/data:/data` mount for all:
+
+```
+/data/
+├── tv/              # Sonarr library
+├── tv-01/           # qBittorrent TV downloads
+├── movies/          # Radarr library
+├── movies-01/       # qBittorrent movie downloads
+├── books/           # Readarr library
+└── books-01/        # qBittorrent book downloads
+```
+
+Each *arr app points to its library folder and sees downloads in the corresponding instance folder.
+
 ## Monitoring
 
 ### Check current configuration
