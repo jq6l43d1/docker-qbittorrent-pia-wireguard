@@ -170,13 +170,13 @@ mkdir -p ~/qbit-instances/{tv-01,movies-01,books-01}
 
 # Clone or copy to each location
 cd ~/qbit-instances/tv-01
-git clone https://github.com/yourusername/docker-qbittorrent-pia-wireguard.git .
+git clone https://github.com/jq6l43d1/docker-qbittorrent-pia-wireguard.git .
 
 cd ~/qbit-instances/movies-01
-git clone https://github.com/yourusername/docker-qbittorrent-pia-wireguard.git .
+git clone https://github.com/jq6l43d1/docker-qbittorrent-pia-wireguard.git .
 
 cd ~/qbit-instances/books-01
-git clone https://github.com/yourusername/docker-qbittorrent-pia-wireguard.git .
+git clone https://github.com/jq6l43d1/docker-qbittorrent-pia-wireguard.git .
 ```
 
 Configure each instance with unique settings:
