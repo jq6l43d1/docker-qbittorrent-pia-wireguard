@@ -13,6 +13,7 @@ Fully automated Docker setup for qBittorrent with Private Internet Access (PIA) 
 ✅ **No hardcoded ports** - Handles PIA's dynamic port changes automatically
 ✅ **Multi-instance support** - Run multiple instances on the same system with different VPN locations
 ✅ **Health monitoring** - Automatic container restart on VPN or WebUI failures
+✅ **Optional Firefox browser** - Access private tracker sites through the same VPN IP as qBittorrent
 
 ## Use Case: Scalable Long-Term Seeding
 
@@ -285,6 +286,72 @@ docker logs qbittorrent-tv-01 2>&1 | grep "qbit-auto-config"
    - Downloads can be bind-mounted to host directories (e.g., `/path/to/downloads/${INSTANCE_NAME}`)
 4. **Resource Usage:** Each instance uses ~200-300MB RAM and minimal CPU, but monitor your system resources
 5. **VPN Connection Limits:** Check your PIA subscription for simultaneous connection limits
+
+## Optional: Firefox Browser Through VPN
+
+Some private trackers require your browser IP to match your torrent client IP. This stack includes an optional Firefox browser that routes through the same VPN tunnel as qBittorrent.
+
+### Enable Firefox
+
+Start the stack with the `firefox` profile:
+
+```bash
+docker compose --profile firefox up -d
+```
+
+Or add Firefox to an existing running stack:
+
+```bash
+docker compose --profile firefox up -d firefox
+```
+
+### Access Firefox
+
+- **HTTPS (recommended):** `https://your-server:3001`
+- **HTTP:** `http://your-server:3000`
+
+The browser runs in a container and is accessed through your web browser via noVNC.
+
+### Verify Same IP
+
+1. In Firefox (through VPN), visit https://whatismyip.com
+2. In qBittorrent WebUI, check Tools → Connection status
+3. Both should show the same VPN IP address
+
+### Port Configuration
+
+Configure Firefox ports in your `.env` file:
+
+```env
+FIREFOX_PORT=3000        # HTTP access
+FIREFOX_PORT_HTTPS=3001  # HTTPS access (recommended)
+```
+
+When running multiple instances, use different ports:
+
+| Instance | FIREFOX_PORT | FIREFOX_PORT_HTTPS |
+|----------|--------------|-------------------|
+| tv-01 | 3000 | 3001 |
+| movies-01 | 3002 | 3003 |
+| books-01 | 3004 | 3005 |
+
+### Security Warning
+
+The Firefox container provides full browser access. **Do not expose it to the internet** without proper authentication. It's designed for local network access only.
+
+### Disable Firefox
+
+To run without Firefox (default behavior):
+
+```bash
+docker compose up -d  # Firefox won't start without --profile firefox
+```
+
+To stop Firefox while keeping qBittorrent running:
+
+```bash
+docker compose --profile firefox stop firefox
+```
 
 ## How It Works
 

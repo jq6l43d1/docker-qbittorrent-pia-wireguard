@@ -38,6 +38,9 @@ services:
     ports:
       # qBittorrent WebUI (configurable port for multi-instance support)
       - "${WEBUI_PORT:-8080}:${WEBUI_PORT:-8080}"
+      # Firefox browser (optional - only used when firefox profile is enabled)
+      - "${FIREFOX_PORT:-3000}:3000"
+      - "${FIREFOX_PORT_HTTPS:-3001}:3001"
       # Note: BitTorrent peer port does not need Docker port mapping
       # Peers connect through the VPN tunnel, bypassing Docker's port mapping
       # qBittorrent is auto-configured to listen on PIA's forwarded port
@@ -83,8 +86,28 @@ services:
       start_period: 60s
     restart: unless-stopped
 
+  firefox:
+    image: lscr.io/linuxserver/firefox:latest
+    container_name: firefox-${INSTANCE_NAME}
+    profiles:
+      - firefox
+    network_mode: "container:pia-wireguard-${INSTANCE_NAME}"
+    depends_on:
+      pia-wireguard:
+        condition: service_healthy
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+    volumes:
+      - firefox-config:/config
+    shm_size: "1gb"
+    restart: unless-stopped
+
 volumes:
   pia-shared:
     name: pia-shared-${INSTANCE_NAME}
   qbittorrent-config:
     name: qbittorrent-config-${INSTANCE_NAME}
+  firefox-config:
+    name: firefox-config-${INSTANCE_NAME}
