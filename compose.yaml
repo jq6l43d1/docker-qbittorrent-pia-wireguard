@@ -89,8 +89,8 @@ services:
   firefox:
     image: lscr.io/linuxserver/firefox:latest
     container_name: firefox-${INSTANCE_NAME}
-    profiles:
-      - firefox
+    deploy:
+      replicas: ${ENABLE_FIREFOX:-0}
     network_mode: "container:pia-wireguard-${INSTANCE_NAME}"
     depends_on:
       pia-wireguard:

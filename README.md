@@ -293,16 +293,16 @@ Some private trackers require your browser IP to match your torrent client IP. T
 
 ### Enable Firefox
 
-Start the stack with the `firefox` profile:
+Set `ENABLE_FIREFOX=1` in your `.env` file:
 
-```bash
-docker compose --profile firefox up -d
+```env
+ENABLE_FIREFOX=1
 ```
 
-Or add Firefox to an existing running stack:
+Then start or redeploy the stack:
 
 ```bash
-docker compose --profile firefox up -d firefox
+docker compose up -d
 ```
 
 ### Access Firefox
@@ -341,16 +341,16 @@ The Firefox container provides full browser access. **Do not expose it to the in
 
 ### Disable Firefox
 
-To run without Firefox (default behavior):
+To disable Firefox, set `ENABLE_FIREFOX=0` in your `.env` file (this is the default):
 
-```bash
-docker compose up -d  # Firefox won't start without --profile firefox
+```env
+ENABLE_FIREFOX=0
 ```
 
-To stop Firefox while keeping qBittorrent running:
+Then redeploy:
 
 ```bash
-docker compose --profile firefox stop firefox
+docker compose up -d
 ```
 
 ## How It Works
