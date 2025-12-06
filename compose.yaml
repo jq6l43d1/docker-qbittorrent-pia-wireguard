@@ -3,8 +3,6 @@ services:
   pia-wireguard:
     image: thrnz/docker-wireguard-pia
     container_name: pia-wireguard-${INSTANCE_NAME}
-    networks:
-      - default
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
@@ -113,7 +111,3 @@ volumes:
     name: qbittorrent-config-${INSTANCE_NAME}
   firefox-config:
     name: firefox-config-${INSTANCE_NAME}
-
-networks:
-  default:
-    driver: bridge
