@@ -57,8 +57,17 @@ if [ -f "$PORT_FILE" ]; then
     if [ -f "$QBIT_CONF" ]; then
         echo "[qbit-auto-config] Updating qBittorrent configuration..."
 
-        # Update BitTorrent port in config
-        sed -i "s/^Connection\\\\PortRangeMin=.*/Connection\\\\PortRangeMin=$FORWARDED_PORT/" "$QBIT_CONF"
+        # Update Session\Port (the key qBittorrent v5+ actually uses)
+        if grep -q "^Session\\\\Port=" "$QBIT_CONF"; then
+            sed -i "s/^Session\\\\Port=.*/Session\\\\Port=$FORWARDED_PORT/" "$QBIT_CONF"
+        else
+            sed -i '/^\[BitTorrent\]/a Session\\Port='"$FORWARDED_PORT" "$QBIT_CONF"
+        fi
+
+        # Also update legacy Connection\PortRangeMin key
+        if grep -q "^Connection\\\\PortRangeMin=" "$QBIT_CONF"; then
+            sed -i "s/^Connection\\\\PortRangeMin=.*/Connection\\\\PortRangeMin=$FORWARDED_PORT/" "$QBIT_CONF"
+        fi
 
         # Ensure VPN interface is set
         if ! grep -q "^Connection\\\\Interface=wg0" "$QBIT_CONF"; then

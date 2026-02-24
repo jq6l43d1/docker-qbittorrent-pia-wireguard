@@ -101,6 +101,9 @@ services:
       - TZ=${TZ:-Etc/UTC}
     volumes:
       - firefox-config:/config
+      # Watchdog service: clears stale Xvfb lock files so the stream recovers
+      # if Xvfb crashes while the container stays running
+      - ./custom-services-firefox:/custom-services.d:ro
     shm_size: "1gb"
     restart: unless-stopped
 

@@ -1,0 +1,27 @@
+#!/usr/bin/with-contenv bash
+
+# Watchdog for Xvfb inside the Firefox container.
+#
+# If Xvfb crashes while the container keeps running, it leaves behind a stale
+# /tmp/.X1-lock file. s6 will try to restart Xvfb but it will immediately fail
+# ("Server is already active for display 1"), leaving the WebSocket stream dead
+# and the browser showing "WebSocket disconnected. Attempting to reconnect..."
+#
+# This service detects that condition and removes the stale lock so s6 can
+# bring Xvfb (and therefore selkies/Firefox) back up on its next attempt.
+
+LOCK_FILE="/tmp/.X1-lock"
+SOCKET_FILE="/tmp/.X11-unix/X1"
+CHECK_INTERVAL=30
+
+echo "[xvfb-watchdog] Starting Xvfb watchdog (checking every ${CHECK_INTERVAL}s)..."
+
+while true; do
+    sleep $CHECK_INTERVAL
+
+    if [ -f "$LOCK_FILE" ] && ! pgrep -x Xvfb > /dev/null 2>&1; then
+        echo "[xvfb-watchdog] Stale X lock detected (lock file exists but Xvfb is not running)"
+        rm -f "$LOCK_FILE" "$SOCKET_FILE"
+        echo "[xvfb-watchdog] Removed stale lock file(s), Xvfb should restart shortly"
+    fi
+done

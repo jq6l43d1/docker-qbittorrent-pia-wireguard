@@ -31,8 +31,13 @@ while true; do
         continue
     fi
 
-    # Read current port from qBittorrent config
-    CONFIG_PORT=$(grep "^Connection\\\\PortRangeMin=" "$QBIT_CONF" 2>/dev/null | cut -d'=' -f2 | tr -d '[:space:]')
+    # Read current port from qBittorrent config (Session\Port is what qBittorrent v5+ uses)
+    CONFIG_PORT=$(grep "^Session\\\\Port=" "$QBIT_CONF" 2>/dev/null | cut -d'=' -f2 | tr -d '[:space:]')
+
+    # Fall back to legacy key if Session\Port not present
+    if [ -z "$CONFIG_PORT" ] || ! [[ "$CONFIG_PORT" =~ ^[0-9]+$ ]]; then
+        CONFIG_PORT=$(grep "^Connection\\\\PortRangeMin=" "$QBIT_CONF" 2>/dev/null | cut -d'=' -f2 | tr -d '[:space:]')
+    fi
 
     # If config port is empty or invalid, skip this check
     if [ -z "$CONFIG_PORT" ] || ! [[ "$CONFIG_PORT" =~ ^[0-9]+$ ]]; then
@@ -51,18 +56,27 @@ while true; do
         cp "$QBIT_CONF" "${QBIT_CONF}.backup-$(date +%Y%m%d-%H%M%S)"
         echo "[port-monitor] Config backed up"
 
-        # Update port in configuration
-        sed -i "s/^Connection\\\\PortRangeMin=.*/Connection\\\\PortRangeMin=$NEW_PORT/" "$QBIT_CONF"
+        # Update Session\Port (the key qBittorrent v5+ actually uses)
+        if grep -q "^Session\\\\Port=" "$QBIT_CONF"; then
+            sed -i "s/^Session\\\\Port=.*/Session\\\\Port=$NEW_PORT/" "$QBIT_CONF"
+        else
+            sed -i '/^\[BitTorrent\]/a Session\\Port='"$NEW_PORT" "$QBIT_CONF"
+        fi
+
+        # Also update legacy Connection\PortRangeMin key
+        if grep -q "^Connection\\\\PortRangeMin=" "$QBIT_CONF"; then
+            sed -i "s/^Connection\\\\PortRangeMin=.*/Connection\\\\PortRangeMin=$NEW_PORT/" "$QBIT_CONF"
+        fi
 
         # Verify the update was successful
-        UPDATED_PORT=$(grep "^Connection\\\\PortRangeMin=" "$QBIT_CONF" 2>/dev/null | cut -d'=' -f2 | tr -d '[:space:]')
+        UPDATED_PORT=$(grep "^Session\\\\Port=" "$QBIT_CONF" 2>/dev/null | cut -d'=' -f2 | tr -d '[:space:]')
 
         if [ "$UPDATED_PORT" = "$NEW_PORT" ]; then
             echo "[port-monitor] Configuration updated successfully"
             echo "[port-monitor] Restarting qBittorrent process to apply changes..."
 
-            # Find and kill qBittorrent process (s6 will automatically restart it)
-            pkill -TERM qbittorrent-nox
+            # Use SIGKILL so qBittorrent cannot overwrite the config with the old port before exiting
+            pkill -KILL qbittorrent-nox
 
             echo "[port-monitor] qBittorrent restart triggered"
             echo "[port-monitor] Port updated from $CONFIG_PORT to $NEW_PORT"
