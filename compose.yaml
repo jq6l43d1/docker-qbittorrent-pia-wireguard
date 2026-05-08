@@ -10,6 +10,10 @@ services:
       - /dev/net/tun:/dev/net/tun
     volumes:
       - pia-shared:/pia-shared
+      # Self-healing healthcheck script (kills PID 1 after sustained ping failures
+      # so docker's restart policy can bring the container back with a fresh
+      # PIA session instead of staying wedged unhealthy)
+      - ./pia-healthcheck:/pia-healthcheck:ro
     environment:
       # PIA Credentials (set in .env file)
       - USER=${PIA_USER}
@@ -45,7 +49,7 @@ services:
       # Peers connect through the VPN tunnel, bypassing Docker's port mapping
       # qBittorrent is auto-configured to listen on PIA's forwarded port
     healthcheck:
-      test: ["CMD", "sh", "-c", "ping -c 1 -W 3 1.1.1.1 > /dev/null 2>&1"]
+      test: ["CMD", "sh", "/pia-healthcheck/healthcheck.sh"]
       interval: 1m
       timeout: 10s
       retries: 3
