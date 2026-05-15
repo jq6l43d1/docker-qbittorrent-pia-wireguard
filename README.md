@@ -692,8 +692,8 @@ docker inspect qbittorrent-${INSTANCE_NAME} | grep -A 10 Health
 - **pia-wireguard**: runs `pia-healthcheck/healthcheck.sh` every 1 minute, which pings `1.1.1.1` through the VPN tunnel.
   - After 3 consecutive failures docker marks the container `unhealthy` (per the compose `retries: 3` setting).
   - **Docker does NOT auto-restart on `unhealthy` alone** — `restart: unless-stopped` only fires on container *exit*, not on `unhealthy` state. The pia image runs with `EXIT_ON_FATAL=0` so it won't exit by itself either.
-  - To force recovery from a wedged tunnel, the script kills PID 1 after 5 consecutive failures, which makes the entrypoint re-exec WireGuard with a fresh PIA session. This is intentional: the script is the actual self-healing mechanism; docker's `unhealthy` state is only an observability signal.
-  - Latent quirk: the failure counter lives at `/tmp/.wg-hc-fail` inside the container. Because the entrypoint re-execs in place rather than letting docker recreate the container, `/tmp` is NOT wiped between cycles — so once `MAX_FAILS=5` has been crossed, every subsequent ping failure fires `kill 1` immediately rather than waiting another 5 cycles. Cosmetic, but it's why you may see counts like `76742 consecutive ping failures` in the health log for stacks that have been stuck a long time.
+  - To force recovery from a wedged tunnel, after 5 consecutive failures the script (a) wipes `/pia/.token` and `/pia/portsig.json` so the next cycle re-auths with PIA from scratch, (b) clears its own `/tmp/.wg-hc-fail` counter so the next cycle gets a fresh `MAX_FAILS` window, and (c) kills PID 1 so the entrypoint re-execs WireGuard. The script is the actual self-healing mechanism — docker's `unhealthy` state is only an observability signal.
+  - The token wipe matters because re-execing alone wasn't always enough: stale state in the anonymous `/pia` volume (which survives in-place re-execs) could itself perpetuate the wedge — `addKey` would keep "succeeding" on the cached auth token while PIA's WireGuard data plane silently dropped handshakes. Forcing a re-auth breaks that.
 
 - **qbittorrent**: Checks WebUI responsiveness every 30 seconds
   - If 3 consecutive checks fail (90 seconds), container is marked unhealthy
@@ -811,9 +811,9 @@ peer: ...
 
 **What's NOT the cause** (so you don't go down these dead ends): the network path, PIA itself, the configured region, or this image. They've all been ruled out by independent tests — a fresh container with identical env on the same host will handshake within seconds.
 
-**Actual cause:** the stack's *anonymous* `/pia` volume has accumulated stuck state and the in-place entrypoint re-exec (the `kill 1` mechanism) doesn't clear it. Once a stack is in this state it cannot self-recover, regardless of how many restart cycles it runs through. The `.token` and `portsig.json` files in that volume hold tokens that PIA's WireGuard data-plane no longer matches up with for that specific server pubkey/peer combination.
+**Actual cause:** the stack's *anonymous* `/pia` volume has accumulated stuck state — specifically, the cached `.token` and `portsig.json` are no longer matched up by PIA's WireGuard data plane for that client.
 
-**Recovery — surgical, preserves all torrent state:**
+**Normally this self-heals within ~5 minutes.** The current `pia-healthcheck/healthcheck.sh` wipes those two files on the same trigger that kills PID 1, so the next entrypoint cycle re-auths with PIA from scratch and the wedge clears. If your stack is on an older version of the script that does the kill-1 without the wipe, or you don't want to wait for the next cycle, you can recover manually:
 
 ```bash
 INST=movies-01   # whichever stack is wedged
