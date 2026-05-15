@@ -380,25 +380,40 @@ The custom init script (`custom-init/99-update-qbit-port.sh`) runs on container 
 
 ### 3. Volume Mounts
 
+**pia-wireguard service:**
+
+```yaml
+volumes:
+  # Shared with qbittorrent so it can read the current forwarded port
+  - pia-shared:/pia-shared
+
+  # Self-healing healthcheck script (see "Health check behavior" below)
+  - ./pia-healthcheck:/pia-healthcheck:ro
+```
+
+**qbittorrent service:**
+
 ```yaml
 volumes:
   # Instance-specific qBittorrent config (Docker volume)
   - qbittorrent-config:/config
 
-  # Access to PIA port information
+  # Read the current PIA-forwarded port
   - pia-shared:/pia-shared:ro
 
-  # Custom initialization script
+  # Auto-configuration on container start
   - ./custom-init:/custom-cont-init.d:ro
 
-  # Custom services (port monitoring)
+  # Background port-change monitor
   - ./custom-services.d:/custom-services.d:ro
 
-  # Downloads (bind mount to host or Docker volume)
-  - /path/to/downloads/${INSTANCE_NAME}:/downloads
+  # Downloads (bind mount to host)
+  - /data:/data
 ```
 
 **Config Volume:** Each instance uses its own `qbittorrent-config-${INSTANCE_NAME}` Docker volume. This prevents multiple instances from conflicting over lockfiles and IPC sockets.
+
+**Anonymous `/pia` volume on pia-wireguard:** The `thrnz/docker-wireguard-pia` image declares `VOLUME /pia` in its Dockerfile, so each container gets an *anonymous* docker volume (named like `dfa7333949…`) that persists across container restarts. It caches the PIA auth token (`/pia/.token`) and the signed port-forwarding token (`/pia/portsig.json`). This volume is what you may need to discard if a stack ever gets wedged (see Troubleshooting → "WireGuard handshake never completes").
 
 ## File Structure
 
@@ -410,10 +425,14 @@ docker-qbittorrent-pia-wireguard/
 ├── qbittorrent-config/                     # Example config (reference only)
 │   └── qBittorrent/
 │       └── qBittorrent.conf                # Default configuration template
-├── custom-init/                            # Auto-configuration scripts
-│   └── 99-update-qbit-port.sh             # Port update script
-├── custom-services.d/                      # Background services
-│   └── port-monitor                        # Automatic port change detection
+├── custom-init/                            # qBittorrent auto-configuration scripts
+│   └── 99-update-qbit-port.sh              # Sets qBittorrent's listening port from PIA on startup
+├── custom-services.d/                      # qBittorrent background services
+│   └── port-monitor                        # Detects PIA port changes and updates qBittorrent live
+├── custom-services-firefox/                # Firefox container background services
+│   └── ...                                 # Watchdog that clears stale Xvfb lock files
+├── pia-healthcheck/                        # pia-wireguard self-healing watchdog
+│   └── healthcheck.sh                      # Pings through wg0; kills PID 1 after 5 failed pings
 ├── README.md                               # This file
 └── LICENSE                                 # MIT License
 ```
@@ -670,9 +689,11 @@ docker inspect qbittorrent-${INSTANCE_NAME} | grep -A 10 Health
 ```
 
 **Health check behavior:**
-- **pia-wireguard**: Pings through the VPN tunnel every 1 minute
-  - If 3 consecutive pings fail (3 minutes), container is marked unhealthy
-  - Container will automatically restart due to `restart: unless-stopped` policy
+- **pia-wireguard**: runs `pia-healthcheck/healthcheck.sh` every 1 minute, which pings `1.1.1.1` through the VPN tunnel.
+  - After 3 consecutive failures docker marks the container `unhealthy` (per the compose `retries: 3` setting).
+  - **Docker does NOT auto-restart on `unhealthy` alone** — `restart: unless-stopped` only fires on container *exit*, not on `unhealthy` state. The pia image runs with `EXIT_ON_FATAL=0` so it won't exit by itself either.
+  - To force recovery from a wedged tunnel, the script kills PID 1 after 5 consecutive failures, which makes the entrypoint re-exec WireGuard with a fresh PIA session. This is intentional: the script is the actual self-healing mechanism; docker's `unhealthy` state is only an observability signal.
+  - Latent quirk: the failure counter lives at `/tmp/.wg-hc-fail` inside the container. Because the entrypoint re-execs in place rather than letting docker recreate the container, `/tmp` is NOT wiped between cycles — so once `MAX_FAILS=5` has been crossed, every subsequent ping failure fires `kill 1` immediately rather than waiting another 5 cycles. Cosmetic, but it's why you may see counts like `76742 consecutive ping failures` in the health log for stacks that have been stuck a long time.
 
 - **qbittorrent**: Checks WebUI responsiveness every 30 seconds
   - If 3 consecutive checks fail (90 seconds), container is marked unhealthy
@@ -775,6 +796,47 @@ If using a management platform like Komodo:
 1. Ensure the `./custom-init` and `./custom-services.d` directories are accessible to the deployment
 2. Each instance's configuration is isolated in its own Docker volume
 3. To reset an instance's config, remove its volume: `docker volume rm qbittorrent-config-instance-name`
+
+### WireGuard handshake never completes (wedged stack)
+
+**Symptom:** One stack restart-loops indefinitely while other stacks on the same host work fine. Inside the bad container, `wg show wg0` reports something like:
+
+```
+peer: ...
+  endpoint: 158.173.164.71:1337
+  transfer: 0 B received, 148 B sent     ← only our handshake init, never any response
+```
+
+(no `latest handshake:` line at all). The health log shows a huge counter — `[wg-healthcheck] 76742 consecutive ping failures, killing PID 1 to trigger restart`.
+
+**What's NOT the cause** (so you don't go down these dead ends): the network path, PIA itself, the configured region, or this image. They've all been ruled out by independent tests — a fresh container with identical env on the same host will handshake within seconds.
+
+**Actual cause:** the stack's *anonymous* `/pia` volume has accumulated stuck state and the in-place entrypoint re-exec (the `kill 1` mechanism) doesn't clear it. Once a stack is in this state it cannot self-recover, regardless of how many restart cycles it runs through. The `.token` and `portsig.json` files in that volume hold tokens that PIA's WireGuard data-plane no longer matches up with for that specific server pubkey/peer combination.
+
+**Recovery — surgical, preserves all torrent state:**
+
+```bash
+INST=movies-01   # whichever stack is wedged
+
+# 1. Stop the stack
+docker stop qbittorrent-$INST pia-wireguard-$INST
+
+# 2. Remove the pia-wireguard container WITH -v
+#    -v removes ONLY the anonymous /pia volume (named volumes survive)
+docker rm -v pia-wireguard-$INST
+
+# 3. Remove qbittorrent (its named config volume survives)
+docker rm qbittorrent-$INST
+
+# 4. Bring the stack back up
+#    qbittorrent-config-<inst> and pia-shared-<inst> volumes are reused unchanged,
+#    so your torrent list, settings, and the /data downloads are all preserved.
+docker compose -p <project-name> --env-file .env up -d
+```
+
+Verify with `wg show wg0` inside the recreated pia-wireguard container — you should see `latest handshake: N seconds ago` and non-zero `transfer: ... B received` within ~10 seconds.
+
+**Do NOT use `docker compose down -v`** — the `-v` there removes named volumes too, which would destroy the qBittorrent config (torrent list, RSS feeds, categories, etc.).
 
 ## Security Notes
 
