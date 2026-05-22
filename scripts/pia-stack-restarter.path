@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch /var/lib/pia-stacks for stack-restart sentinels
+
+[Path]
+PathModified=/var/lib/pia-stacks
+DirectoryNotEmpty=/var/lib/pia-stacks
+Unit=pia-stack-restarter.service
+
+[Install]
+WantedBy=multi-user.target

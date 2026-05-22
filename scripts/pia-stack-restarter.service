@@ -1,0 +1,10 @@
+[Unit]
+Description=Restart pia-qbittorrent-wireguard stacks signaled in /var/lib/pia-stacks
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pia-stack-restarter.sh
+StandardOutput=journal
+StandardError=journal

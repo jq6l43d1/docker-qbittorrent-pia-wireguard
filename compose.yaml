@@ -10,11 +10,18 @@ services:
       - /dev/net/tun:/dev/net/tun
     volumes:
       - pia-shared:/pia-shared
-      # Self-healing healthcheck script (kills PID 1 after sustained ping failures
-      # so docker's restart policy can bring the container back with a fresh
-      # PIA session instead of staying wedged unhealthy)
+      # Self-healing healthcheck script. On sustained ping failures it
+      # writes a sentinel to /host-signal so a systemd path unit on the
+      # host can restart the whole stack (see scripts/pia-stack-restarter.*).
+      # Falls back to `kill 1` if the sentinel dir isn't mounted, which
+      # preserves recovery for older deployments at the cost of orphaning
+      # the qbt/firefox containers in a dead netns.
       - ./pia-healthcheck:/pia-healthcheck:ro
+      - /var/lib/pia-stacks:/host-signal
     environment:
+      # Stack identity, used by the healthcheck to name its sentinel file
+      - INSTANCE_NAME=${INSTANCE_NAME}
+
       # PIA Credentials (set in .env file)
       - USER=${PIA_USER}
       - PASS=${PIA_PASS}
