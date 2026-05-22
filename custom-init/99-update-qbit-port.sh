@@ -78,6 +78,20 @@ if [ -f "$PORT_FILE" ]; then
         # Ensure UPnP is disabled
         sed -i "s/^Connection\\\\UPnP=.*/Connection\\\\UPnP=false/" "$QBIT_CONF"
 
+        # Force WebUI to bind IPv4 wildcard. qBittorrent 5+ (Qt 6) maps
+        # WebUI\Address=* to QHostAddress::Any, which creates an IPv6
+        # dual-stack listener [::]:port. The PIA wireguard image sets
+        # disable_ipv6=1 on eth0 as a leak-prevention measure, and the kernel
+        # then refuses to deliver IPv4 SYNs arriving on eth0 to the v6
+        # listener. Docker's port-publish DNATs to the container's IPv4 on
+        # eth0, so the WebUI becomes unreachable. Binding 0.0.0.0 explicitly
+        # sidesteps the dual-stack mapping.
+        if grep -q "^WebUI\\\\Address=" "$QBIT_CONF"; then
+            sed -i 's|^WebUI\\Address=.*|WebUI\\Address=0.0.0.0|' "$QBIT_CONF"
+        else
+            sed -i '/^\[Preferences\]/a WebUI\\Address=0.0.0.0' "$QBIT_CONF"
+        fi
+
         # Configure WebUI port if provided
         if [ -n "$WEBUI_PORT" ]; then
             echo "[qbit-auto-config] Configuring WebUI port to $WEBUI_PORT..."
@@ -90,6 +104,7 @@ if [ -f "$PORT_FILE" ]; then
 
         echo "[qbit-auto-config] Configuration updated successfully!"
         echo "[qbit-auto-config] - BitTorrent Port: $FORWARDED_PORT"
+        echo "[qbit-auto-config] - WebUI Address: 0.0.0.0"
         echo "[qbit-auto-config] - WebUI Port: ${WEBUI_PORT:-8080}"
         echo "[qbit-auto-config] - Interface: wg0"
         echo "[qbit-auto-config] - UPnP: disabled"
