@@ -1,7 +1,9 @@
 name: pia-qbittorrent
 services:
   pia-wireguard:
-    image: thrnz/docker-wireguard-pia
+    build:
+      context: .
+    image: pia-wireguard-with-healthcheck:local
     container_name: pia-wireguard-${INSTANCE_NAME}
     cap_add:
       - NET_ADMIN
@@ -10,13 +12,11 @@ services:
       - /dev/net/tun:/dev/net/tun
     volumes:
       - pia-shared:/pia-shared
-      # Self-healing healthcheck script. On sustained ping failures it
-      # writes a sentinel to /host-signal so a systemd path unit on the
-      # host can restart the whole stack (see scripts/pia-stack-restarter.*).
-      # Falls back to `kill 1` if the sentinel dir isn't mounted, which
-      # preserves recovery for older deployments at the cost of orphaning
-      # the qbt/firefox containers in a dead netns.
-      - ./pia-healthcheck:/pia-healthcheck:ro
+      # /host-signal: pia-healthcheck.sh writes <instance>.restart here
+      # after sustained ping failures so the host's systemd path unit
+      # (scripts/pia-stack-restarter.*) restarts the whole stack.
+      # Falls back to `kill 1` if not mounted, which leaves qbt/firefox
+      # stranded in a dead netns — so this bind is effectively required.
       - /var/lib/pia-stacks:/host-signal
     environment:
       # Stack identity, used by the healthcheck to name its sentinel file
