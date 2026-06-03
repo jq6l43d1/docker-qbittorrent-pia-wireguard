@@ -1,9 +1,11 @@
 [Unit]
 Description=Watch /var/lib/pia-stacks for stack-restart sentinels
 
+# Trigger only on actual restart sentinels. DirectoryNotEmpty would re-fire
+# the service for any leftover file in the dir (e.g. a `.breaker` breadcrumb),
+# re-arming the very loop this watchdog is meant to break.
 [Path]
-PathModified=/var/lib/pia-stacks
-DirectoryNotEmpty=/var/lib/pia-stacks
+PathExistsGlob=/var/lib/pia-stacks/*.restart
 Unit=pia-stack-restarter.service
 
 [Install]
