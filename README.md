@@ -12,7 +12,7 @@ Fully automated Docker setup for qBittorrent with Private Internet Access (PIA) 
 ✅ **Persistent configuration** - Settings survive container restarts
 ✅ **No hardcoded ports** - Handles PIA's dynamic port changes automatically
 ✅ **Multi-instance support** - Run multiple instances on the same system with different VPN locations
-✅ **Health monitoring** - Automatic container restart on VPN or WebUI failures
+✅ **Self-healing** - A host-side watchdog restarts a stack whose VPN tunnel wedges, with startup grace, cooldown, and a circuit breaker to prevent restart loops
 ✅ **Optional Firefox browser** - Access private tracker sites through the same VPN IP as qBittorrent
 
 ## Use Case: Scalable Long-Term Seeding
@@ -387,8 +387,11 @@ volumes:
   # Shared with qbittorrent so it can read the current forwarded port
   - pia-shared:/pia-shared
 
-  # Self-healing healthcheck script (see "Health check behavior" below)
-  - ./pia-healthcheck:/pia-healthcheck:ro
+  # Host-watchdog signal dir: the healthcheck writes <instance>.restart here
+  # when it decides the tunnel is wedged (see "Health check behavior" and
+  # "Self-Healing Host Watchdog" below). The healthcheck script itself is
+  # baked into the image (Dockerfile COPY), not bind-mounted.
+  - /var/lib/pia-stacks:/host-signal
 ```
 
 **qbittorrent service:**
@@ -431,8 +434,14 @@ docker-qbittorrent-pia-wireguard/
 │   └── port-monitor                        # Detects PIA port changes and updates qBittorrent live
 ├── custom-services-firefox/                # Firefox container background services
 │   └── ...                                 # Watchdog that clears stale Xvfb lock files
-├── pia-healthcheck/                        # pia-wireguard self-healing watchdog
-│   └── healthcheck.sh                      # Pings through wg0; kills PID 1 after 5 failed pings
+├── pia-healthcheck/                        # pia-wireguard healthcheck (baked into the image)
+│   └── healthcheck.sh                      # Detects a wedged tunnel; signals the host watchdog
+├── scripts/                                # Host-side self-healing watchdog (installed on the docker host)
+│   ├── pia-stack-restarter.sh              # Restarts a whole stack on a sentinel; cooldown + circuit breaker
+│   ├── pia-stack-restarter.path            # systemd path unit watching /var/lib/pia-stacks/*.restart
+│   ├── pia-stack-restarter.service         # oneshot service the path unit triggers
+│   └── install-host-watchdog.sh            # Installs the above onto the docker host
+├── Dockerfile                              # FROM thrnz/docker-wireguard-pia; bakes in healthcheck.sh
 ├── README.md                               # This file
 └── LICENSE                                 # MIT License
 ```
@@ -689,11 +698,15 @@ docker inspect qbittorrent-${INSTANCE_NAME} | grep -A 10 Health
 ```
 
 **Health check behavior:**
-- **pia-wireguard**: runs `pia-healthcheck/healthcheck.sh` every 1 minute, which pings `1.1.1.1` through the VPN tunnel.
-  - After 3 consecutive failures docker marks the container `unhealthy` (per the compose `retries: 3` setting).
-  - **Docker does NOT auto-restart on `unhealthy` alone** — `restart: unless-stopped` only fires on container *exit*, not on `unhealthy` state. The pia image runs with `EXIT_ON_FATAL=0` so it won't exit by itself either.
-  - To force recovery from a wedged tunnel, after 5 consecutive failures the script (a) wipes `/pia/.token` and `/pia/portsig.json` so the next cycle re-auths with PIA from scratch, (b) clears its own `/tmp/.wg-hc-fail` counter so the next cycle gets a fresh `MAX_FAILS` window, and (c) kills PID 1 so the entrypoint re-execs WireGuard. The script is the actual self-healing mechanism — docker's `unhealthy` state is only an observability signal.
-  - The token wipe matters because re-execing alone wasn't always enough: stale state in the anonymous `/pia` volume (which survives in-place re-execs) could itself perpetuate the wedge — `addKey` would keep "succeeding" on the cached auth token while PIA's WireGuard data plane silently dropped handshakes. Forcing a re-auth breaks that.
+- **pia-wireguard**: runs `pia-healthcheck/healthcheck.sh` (baked into the image) on Docker's healthcheck schedule. Each probe pings `1.1.1.1` through the VPN tunnel.
+  - After 3 consecutive failures Docker marks the container `unhealthy` (per the compose `retries: 3`). This is only an **observability signal** — Docker does NOT auto-restart on `unhealthy`: `restart: unless-stopped` fires only on container *exit*, and the pia image runs with `EXIT_ON_FATAL=0` so it won't exit on its own.
+  - Recovery is driven by the script plus the **host watchdog** (see "Self-Healing Host Watchdog" below), not by Docker. When the script concludes the tunnel is genuinely **wedged**, it writes a sentinel file into the bind-mounted `/host-signal` dir; the host watchdog then restarts the *whole stack* (qbittorrent + firefox must be restarted alongside pia because they share its network namespace via `network_mode: container:`).
+  - **Wedge detection is deliberately conservative** to avoid restart loops (this is what the 2026-06 incident hardened):
+    - **Startup grace** — the script never signals until pia's PID 1 has been alive `HC_STARTUP_GRACE` seconds (default 90). Without this, a freshly (re)started tunnel fails pings during its own handshake window and signals a restart — which triggers the next restart, forever.
+    - **Handshake gate** — a lost ping only counts toward a wedge if the WireGuard handshake has *also* gone stale (older than `HC_HANDSHAKE_STALE`, default 180s). A fresh handshake plus a lost ping is a transient upstream-WAN blip that self-recovers, so the script ignores it.
+    - **Time-based threshold** — the bad state must persist `HC_WEDGE_SECS` of wall-clock (default 180) before signalling, so the probe cadence (Docker's fast `start-interval` during startup vs. the steady-state `interval`) is irrelevant.
+  - **Fallback** — if `/host-signal` isn't mounted (watchdog not installed), the script falls back to the legacy in-container behavior: wipe `/pia/.token` + `/pia/portsig.json` and `kill 1` so the entrypoint re-execs WireGuard and re-auths from scratch.
+  - The HC tunables above are read from the pia-wireguard container environment; override them in the `environment:` block of `compose.yaml` if needed.
 
 - **qbittorrent**: Checks WebUI responsiveness every 30 seconds
   - If 3 consecutive checks fail (90 seconds), container is marked unhealthy
@@ -720,6 +733,46 @@ docker exec pia-wireguard-${INSTANCE_NAME} ping -c 3 1.1.1.1
 
 # Manually test qBittorrent WebUI
 docker exec qbittorrent-${INSTANCE_NAME} curl -f http://localhost:${WEBUI_PORT}
+```
+
+## Self-Healing Host Watchdog
+
+Because Docker won't restart a container that's merely `unhealthy`, and because restarting `pia-wireguard` alone would strand the qbittorrent/firefox siblings in a dead network namespace (they use `network_mode: container:pia-wireguard-*`), recovery is handled by a small **host-side** watchdog rather than from inside the container.
+
+### How it works
+
+1. The pia healthcheck decides the tunnel is wedged (see "Health check behavior") and writes `/var/lib/pia-stacks/<instance>.restart` — a directory bind-mounted into the container as `/host-signal`.
+2. A systemd **path unit** (`pia-stack-restarter.path`) watches `/var/lib/pia-stacks/*.restart` and triggers `pia-stack-restarter.service`.
+3. The restarter (`/usr/local/sbin/pia-stack-restarter.sh`) stops qbittorrent + firefox, restarts pia, waits for it to settle, then starts the siblings again so they re-attach to the fresh netns.
+
+### Loop protection
+
+The restarter is hardened against the failure mode where a stack keeps signalling and gets hammered (an early version logged ~30k restarts in 24h and tripped PIA's auth rate limit):
+
+| Tunable | Default | Behavior |
+|---------|---------|----------|
+| `COOLDOWN_SECS` | 120 | A stack is restarted at most once per this window. |
+| `WIPE_AFTER` | 3 | The `/pia` auth token is wiped only from the Nth consecutive restart onward. Wiping on *every* restart forces a fresh PIA auth each time, which trips PIA's `too_many_attempts` rate limit and turns a transient wobble into a permanent spiral. |
+| `BREAKER_MAX` / `BREAKER_WINDOW_SECS` | 6 / 1800 | More than `BREAKER_MAX` restarts within the window trips the circuit breaker. |
+| `BREAKER_COOLDOWN_SECS` | 1800 | Once tripped, restarts for that stack are paused this long, and a `<stack>.breaker` breadcrumb is dropped for monitoring/alerting. A stack that can't self-heal in a handful of tries needs a human, not more restarts. |
+| `HEAL_RESET_SECS` | 600 | After this quiet period the rolling restart counter resets. |
+
+These are read from the `pia-stack-restarter.service` environment. State (last-restart time, rolling count, breaker status) lives in `/var/lib/pia-stack-restarter/`, deliberately separate from the watched signal dir so leftover files can't re-trigger the watchdog.
+
+### Installation
+
+Run on the docker host (e.g. the LXC running the stacks):
+
+```bash
+sudo scripts/install-host-watchdog.sh
+```
+
+This installs the script to `/usr/local/sbin`, the units to `/etc/systemd/system`, and enables `pia-stack-restarter.path`. Audit its activity and test it with:
+
+```bash
+journalctl -u pia-stack-restarter -f
+# manually trigger a restart of one stack:
+touch /var/lib/pia-stacks/tv-01.restart
 ```
 
 ## No Docker Port Mapping Needed for Peer Connections
@@ -807,13 +860,13 @@ peer: ...
   transfer: 0 B received, 148 B sent     ← only our handshake init, never any response
 ```
 
-(no `latest handshake:` line at all). The health log shows a huge counter — `[wg-healthcheck] 76742 consecutive ping failures, killing PID 1 to trigger restart`.
+(no `latest handshake:` line at all). The health log shows the wedge message — `[wg-healthcheck] tunnel wedged 184s (handshake age 9999s), signaling host watchdog to restart stack 'movies-01'`.
 
 **What's NOT the cause** (so you don't go down these dead ends): the network path, PIA itself, the configured region, or this image. They've all been ruled out by independent tests — a fresh container with identical env on the same host will handshake within seconds.
 
 **Actual cause:** the stack's *anonymous* `/pia` volume has accumulated stuck state — specifically, the cached `.token` and `portsig.json` are no longer matched up by PIA's WireGuard data plane for that client.
 
-**Normally this self-heals within ~5 minutes.** The current `pia-healthcheck/healthcheck.sh` wipes those two files on the same trigger that kills PID 1, so the next entrypoint cycle re-auths with PIA from scratch and the wedge clears. If your stack is on an older version of the script that does the kill-1 without the wipe, or you don't want to wait for the next cycle, you can recover manually:
+**Normally this self-heals automatically.** Once the tunnel has been continuously bad for `HC_WEDGE_SECS` with a stale handshake, the healthcheck signals the host watchdog, which restarts the whole stack (see "Self-Healing Host Watchdog"). The watchdog escalates to wiping `/pia/.token` and `/pia/portsig.json` after `WIPE_AFTER` consecutive restarts, so a genuinely stuck token gets cleared and the stack re-auths from scratch. If the host watchdog isn't installed (the in-container fallback does the wipe + `kill 1` itself), or you'd rather not wait, you can recover manually:
 
 ```bash
 INST=movies-01   # whichever stack is wedged
